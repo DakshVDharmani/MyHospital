@@ -431,12 +431,34 @@ export function HealthcareScene({
     }
     raf = requestAnimationFrame(tick);
 
+    const BASE_VFOV_DEG = 27; // the camera's initial fov — the design's reference vertical FOV
     let baseWidthPx = 0;
+    let baseAspect = 0;
     const resize = () => {
       const w = mount.clientWidth || 1;
       const h = mount.clientHeight || 1;
-      if (!baseWidthPx) baseWidthPx = w;
-      camera.aspect = w / h;
+      const aspect = w / h;
+      if (!baseWidthPx) {
+        baseWidthPx = w;
+        baseAspect = aspect;
+      }
+      // A fixed vFov means the HORIZONTAL fov shrinks whenever the container gets relatively
+      // taller than the original design aspect — e.g. toggling fullscreen (F11) grows the
+      // container's height (browser chrome disappearing) without growing its width. That crops
+      // the scene sideways instead of just changing its zoom, which is exactly what made the
+      // ambulance's angled front clip at the panel edge. When that happens, widen the vertical
+      // fov just enough to keep the ORIGINAL horizontal framing intact (more headroom top/bottom
+      // instead of side-cropping). Only do this when the container is relatively taller than the
+      // base — a relatively wider container is the normal desktop-resize case, handled below by
+      // extending the view via the lens-shift instead.
+      if (aspect < baseAspect) {
+        const baseVFovRad = (BASE_VFOV_DEG * Math.PI) / 180;
+        const hExtentFactor = Math.tan(baseVFovRad / 2) * baseAspect;
+        camera.fov = (2 * Math.atan(hExtentFactor / aspect) * 180) / Math.PI;
+      } else {
+        camera.fov = BASE_VFOV_DEG;
+      }
+      camera.aspect = aspect;
       // Widening the canvas re-centers the view (shifting doctor/nurse right). Use a lens-shift
       // (projection-only offset, no camera movement) so the original half is pixel-identical —
       // physically moving the camera instead causes parallax and makes static models look like
@@ -449,6 +471,7 @@ export function HealthcareScene({
         camera.clearViewOffset();
       }
       camera.updateProjectionMatrix();
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.setSize(w, h);
     };
     resize();
