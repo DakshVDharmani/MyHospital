@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #0d0d0f;
+  --color-ink-soft: #1a1a1f;
+  --color-cream: #faf8f3;
+  --color-cream-light: #fdfcf9;
+  --color-gold-light: #f3e5c8;
+  --color-red-accent: #ff6b6b;
+
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Playfair Display", ui-serif, Georgia, serif;
+}
+
+/* =========================
+   Global Reset
+========================= */
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* =========================
+   Root
+========================= */
+
+:root {
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  font-weight: 400;
+
+  color: #111827;
+  background-color: #ffffff;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* =========================
+   Body
+========================= */
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+body {
+  overflow-x: hidden;
+  background: #ffffff;
+  color: #111827;
+}
+
+/* =========================
+   Typography
+========================= */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 600;
+}
+
+p {
+  line-height: 1.6;
+}
+
+/* =========================
+   Links
+========================= */
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* =========================
+   Lists
+========================= */
+
+ul,
+ol {
+  list-style: none;
+}
+
+/* =========================
+   Images
+========================= */
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+/* =========================
+   Buttons
+========================= */
+
+button {
+  font: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+/* =========================
+   Inputs
+========================= */
+
+input,
+textarea,
+select {
+  font: inherit;
+}
