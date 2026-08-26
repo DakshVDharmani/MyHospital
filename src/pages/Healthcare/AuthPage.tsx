@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { HeartPulse, Stethoscope, ShieldCheck } from 'lucide-react';
 import { HealthcareScene, type Activity } from './Scene';
-import { AuthForm, type Mode } from './AuthForm';
+import { AuthForm, type AuthSubmitPayload } from './AuthForm';
+import type { Mode } from './AuthForm';
+import { supabase } from '../../lib/supabaseClient';
 
 // TODO: point this at the real destination once it's linked.
 const NEXT_PAGE_URL = '/healthcare/login';
@@ -10,6 +12,8 @@ export default function HealthcareAuthPage() {
   const [mode, setMode] = useState<Mode>('login');
   const [loggingIn, setLoggingIn] = useState(false);
   const [pageFadeOut, setPageFadeOut] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const activityRef = useRef<Activity>({ lastActivity: 0, passwordActive: false });
 
@@ -26,12 +30,60 @@ export default function HealthcareAuthPage() {
     };
   }, [markActivity]);
 
-  const handleSubmit = useCallback(() => {
-    setLoggingIn((prev) => {
-      if (prev) return prev;
-      return true;
-    });
-  }, []);
+  const handleSubmit = useCallback(async (payload: AuthSubmitPayload) => {
+    if (submitting) return;
+    setAuthError(null);
+    setSubmitting(true);
+
+    try {
+      if (payload.mode === 'signup') {
+        const { data, error } = await supabase.auth.signUp({
+          email: payload.email,
+          password: payload.password,
+          options: { data: { name: payload.name, role: payload.role } },
+        });
+        if (error) throw error;
+
+        // If email confirmation is off, we get a session immediately and can
+        // create the profile row now. Otherwise it's created on first login.
+        if (data.session && data.user) {
+          const { error: profileError } = await supabase.from('users').upsert({
+            id: data.user.id,
+            name: payload.name,
+            email: payload.email,
+            role: payload.role,
+          });
+          if (profileError) throw profileError;
+        } else {
+          setSubmitting(false);
+          setAuthError('Check your email to confirm your account, then log in.');
+          return;
+        }
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: payload.email,
+          password: payload.password,
+        });
+        if (error) throw error;
+
+        const user = data.user;
+        const role = (user.user_metadata?.role as AuthSubmitPayload['role']) ?? payload.role;
+        const name = (user.user_metadata?.name as string) ?? payload.email;
+        const { error: profileError } = await supabase.from('users').upsert({
+          id: user.id,
+          name,
+          email: user.email ?? payload.email,
+          role,
+        });
+        if (profileError) throw profileError;
+      }
+
+      setLoggingIn(true);
+    } catch (err) {
+      setSubmitting(false);
+      setAuthError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    }
+  }, [submitting]);
 
   const handleDriveOffDone = useCallback(() => {
     setPageFadeOut(true);
@@ -40,7 +92,10 @@ export default function HealthcareAuthPage() {
     }, 420);
   }, []);
 
-  const switchMode = (next: Mode) => setMode(next);
+  const switchMode = (next: Mode) => {
+    setAuthError(null);
+    setMode(next);
+  };
 
   return (
     <div className={`hc-page ${pageFadeOut ? 'hc-page-fade-out' : ''}`}>
@@ -301,7 +356,7 @@ export default function HealthcareAuthPage() {
           -webkit-backdrop-filter: blur(18px);
           border: 1px solid rgba(255, 255, 255, 0.6);
           border-radius: 26px;
-          padding: 34px 32px;
+          padding: 24px 28px;
           box-shadow:
             0 1px 1px rgba(11, 43, 60, 0.03),
             0 12px 32px rgba(6, 34, 32, 0.16),
@@ -321,7 +376,7 @@ export default function HealthcareAuthPage() {
           background: var(--field-bg);
           border-radius: 999px;
           padding: 4px;
-          margin-bottom: 22px;
+          margin-bottom: 14px;
         }
         .hc-tab {
           flex: 1;
@@ -342,30 +397,59 @@ export default function HealthcareAuthPage() {
           box-shadow: 0 4px 14px rgba(11, 43, 60, 0.12);
         }
 
+        .hc-role-toggle {
+          display: flex;
+          gap: 8px;
+          margin: 0 0 10px;
+        }
+        .hc-role-btn {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          border: 1.5px solid var(--line);
+          background: var(--field-bg);
+          padding: 6px 0;
+          border-radius: 10px;
+          font-family: 'Manrope', sans-serif;
+          font-weight: 700;
+          font-size: 12px;
+          color: var(--ink-soft);
+          cursor: pointer;
+          transition: background 0.22s var(--ease), color 0.22s var(--ease), border-color 0.22s var(--ease);
+        }
+        .hc-role-btn svg { flex-shrink: 0; }
+        .hc-role-btn.hc-role-btn-active {
+          background: rgba(14, 156, 143, 0.1);
+          border-color: var(--teal);
+          color: var(--teal-deep);
+        }
+
         .hc-form-title {
           font-family: 'Fraunces', 'Manrope', serif;
           font-weight: 600;
-          font-size: 22px;
+          font-size: 20px;
           color: var(--navy);
-          margin: 0 0 5px;
+          margin: 0 0 3px;
         }
         .hc-form-sub {
           font-size: 12.5px;
           color: var(--ink-soft);
           font-weight: 500;
-          margin: 0 0 18px;
+          margin: 0 0 12px;
         }
 
         .hc-quote {
-          margin: 0 0 18px;
-          padding: 10px 12px;
+          margin: 0 0 12px;
+          padding: 8px 10px;
           border-left: 2.5px solid var(--teal);
           background: var(--field-bg);
           border-radius: 0 10px 10px 0;
           font-family: 'Fraunces', 'Manrope', serif;
           font-style: italic;
-          font-size: 12px;
-          line-height: 1.5;
+          font-size: 11px;
+          line-height: 1.4;
           color: var(--navy-soft);
         }
         .hc-quote span {
@@ -393,9 +477,13 @@ export default function HealthcareAuthPage() {
           background: var(--field-bg);
           border: 1.5px solid var(--line);
           border-radius: 11px;
-          padding: 10px 12px;
-          margin-bottom: 12px;
+          padding: 8px 12px;
+          margin-bottom: 8px;
           transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+        }
+        .hc-field-name {
+          /* Balances the login-only quote block so the login and signup cards render at the same height. */
+          margin-bottom: 20px;
         }
         .hc-field.hc-focused {
           border-color: var(--teal);
@@ -432,7 +520,7 @@ export default function HealthcareAuthPage() {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          margin: -2px 0 20px;
+          margin: -2px 0 12px;
         }
         .hc-remember {
           display: flex;
@@ -454,7 +542,7 @@ export default function HealthcareAuthPage() {
 
         .hc-submit {
           width: 100%;
-          padding: 12px;
+          padding: 10px;
           border: none;
           border-radius: 11px;
           background: linear-gradient(135deg, var(--teal) 0%, var(--teal-deep) 100%);
@@ -469,12 +557,20 @@ export default function HealthcareAuthPage() {
         }
         .hc-submit:hover { transform: translateY(-2px); box-shadow: 0 16px 30px rgba(14, 156, 143, 0.36); }
         .hc-submit:active { transform: translateY(0); }
+        .hc-submit:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+
+        .hc-error {
+          margin: -2px 0 12px;
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--danger);
+        }
 
         .hc-divider {
           display: flex;
           align-items: center;
           gap: 12px;
-          margin: 18px 0 14px;
+          margin: 12px 0 10px;
         }
         .hc-divider::before, .hc-divider::after {
           content: '';
@@ -499,7 +595,7 @@ export default function HealthcareAuthPage() {
           align-items: center;
           justify-content: center;
           gap: 8px;
-          height: 42px;
+          height: 38px;
           border-radius: 12px;
           border: 1.5px solid var(--line);
           background: #fff;
@@ -516,7 +612,7 @@ export default function HealthcareAuthPage() {
           font-size: 12px;
           font-weight: 600;
           color: var(--ink-soft);
-          margin-top: 18px;
+          margin-top: 12px;
         }
         .hc-switch-note button {
           background: none;
@@ -551,15 +647,15 @@ export default function HealthcareAuthPage() {
           <div className="hc-brand-icon">
             <HeartPulse size={19} strokeWidth={2.3} />
           </div>
-          <span className="hc-brand-name">CareLink Health</span>
+          <span className="hc-brand-name">MyHospital</span>
         </div>
 
         <div className="hc-visual-copy">
-          <h1>{mode === 'login' ? 'Care that shows up on time.' : 'Join the frontline of care.'}</h1>
+          <h1>{mode === 'login' ? 'Care that shows up on time.' : 'Join the HealthForGood network.'}</h1>
           <p>
             {mode === 'login'
-              ? 'Sign in to coordinate patients, staff and dispatch for your clinic or outreach team.'
-              : 'Create an account to start coordinating patients, staff and dispatch in minutes.'}
+              ? 'Sign in as a doctor or patient to connect with your HealthForGood care team.'
+              : 'Create a doctor or patient account and start using MyHospital in minutes.'}
           </p>
         </div>
 
@@ -570,14 +666,21 @@ export default function HealthcareAuthPage() {
 
         <div className="hc-trust-row">
           <div className="hc-trust-item"><ShieldCheck size={14} /> HIPAA-aware</div>
-          <div className="hc-trust-item"><Stethoscope size={14} /> Built for clinics &amp; NGOs</div>
+          <div className="hc-trust-item"><Stethoscope size={14} /> Powered by HealthForGood NGO</div>
         </div>
       </div>
 
       <div className="hc-half hc-form-half">
         <div className="hc-page-wash" />
         <div className="hc-form-card-wrap">
-          <AuthForm mode={mode} switchMode={switchMode} activityRef={activityRef} onSubmit={handleSubmit} />
+          <AuthForm
+            mode={mode}
+            switchMode={switchMode}
+            activityRef={activityRef}
+            onSubmit={handleSubmit}
+            submitting={submitting}
+            error={authError}
+          />
         </div>
       </div>
     </div>
