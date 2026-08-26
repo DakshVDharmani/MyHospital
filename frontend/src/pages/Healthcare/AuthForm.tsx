@@ -1,21 +1,35 @@
 import { useState } from 'react';
-import { Mail, Lock, User, Eye, EyeOff, Chrome, Facebook } from 'lucide-react';
+import { Mail, Lock, User, Eye, EyeOff, Chrome, Facebook, Stethoscope, HeartPulse } from 'lucide-react';
 import type { Activity } from './Scene';
 
 export type Mode = 'login' | 'signup';
+export type Role = 'patient' | 'doctor';
+
+export type AuthSubmitPayload = {
+  mode: Mode;
+  role: Role;
+  name: string;
+  email: string;
+  password: string;
+};
 
 export function AuthForm({
   mode,
   switchMode,
   activityRef,
   onSubmit,
+  submitting = false,
+  error = null,
 }: {
   mode: Mode;
   switchMode: (next: Mode) => void;
   activityRef: React.RefObject<Activity>;
-  onSubmit: () => void;
+  onSubmit: (payload: AuthSubmitPayload) => void;
+  submitting?: boolean;
+  error?: string | null;
 }) {
   const [showPassword, setShowPassword] = useState(false);
+  const [role, setRole] = useState<Role>('patient');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,7 +37,7 @@ export function AuthForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit();
+    onSubmit({ mode, role, name, email, password });
   };
 
   return (
@@ -47,8 +61,26 @@ export function AuthForm({
 
       <h2 className="hc-form-title">{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2>
       <p className="hc-form-sub">
-        {mode === 'login' ? 'Sign in to your care portal.' : 'Set up access for your care team in under a minute.'}
+        {mode === 'login' ? 'Sign in to your MyHospital portal.' : 'Set up your MyHospital account in under a minute.'}
       </p>
+
+      <label className="hc-field-label">I am a</label>
+      <div className="hc-role-toggle">
+        <button
+          type="button"
+          className={`hc-role-btn ${role === 'patient' ? 'hc-role-btn-active' : ''}`}
+          onClick={() => setRole('patient')}
+        >
+          <HeartPulse size={14} /> Patient
+        </button>
+        <button
+          type="button"
+          className={`hc-role-btn ${role === 'doctor' ? 'hc-role-btn-active' : ''}`}
+          onClick={() => setRole('doctor')}
+        >
+          <Stethoscope size={14} /> Doctor
+        </button>
+      </div>
 
       {mode === 'login' && (
         <div className="hc-quote">
@@ -61,12 +93,12 @@ export function AuthForm({
         {mode === 'signup' && (
           <>
             <label className="hc-field-label" htmlFor="hc-name">Full name</label>
-            <label className={`hc-field ${focusedField === 'name' ? 'hc-focused' : ''}`}>
+            <label className={`hc-field hc-field-name ${focusedField === 'name' ? 'hc-focused' : ''}`}>
               <User size={16} />
               <input
                 id="hc-name"
                 type="text"
-                placeholder="Dr. Jane Alabi"
+                placeholder={role === 'doctor' ? 'Dr. Jane Alabi' : 'Jane Alabi'}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onFocus={() => setFocusedField('name')}
@@ -83,7 +115,7 @@ export function AuthForm({
           <input
             id="hc-email"
             type="email"
-            placeholder="you@carelink.org"
+            placeholder="you@myhospital.org"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             onFocus={() => setFocusedField('email')}
@@ -136,8 +168,14 @@ export function AuthForm({
           </div>
         )}
 
-        <button type="submit" className="hc-submit">
-          {mode === 'login' ? 'Log In to Care Portal' : 'Create Account'}
+        {error && <p className="hc-error">{error}</p>}
+
+        <button type="submit" className="hc-submit" disabled={submitting}>
+          {submitting
+            ? 'Please wait…'
+            : mode === 'login'
+              ? `Log In as ${role === 'doctor' ? 'Doctor' : 'Patient'}`
+              : `Create ${role === 'doctor' ? 'Doctor' : 'Patient'} Account`}
         </button>
       </form>
 
@@ -148,7 +186,7 @@ export function AuthForm({
       </div>
 
       <p className="hc-switch-note">
-        {mode === 'login' ? "New to CareLink?" : 'Already have an account?'}
+        {mode === 'login' ? "New to MyHospital?" : 'Already have an account?'}
         <button type="button" onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}>
           {mode === 'login' ? 'Sign up' : 'Log in'}
         </button>
