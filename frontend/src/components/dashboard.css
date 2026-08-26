@@ -1,0 +1,85 @@
+.dc-section { margin-bottom: 28px; }
+.dc-section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+.dc-section-title { font-family: 'Fraunces', 'Manrope', serif; font-weight: 600; font-size: 16px; color: #0B2B3C; margin: 0; }
+.dc-section-sub { font-size: 12px; color: #5C7680; font-weight: 500; margin: 2px 0 0; }
+
+.dc-hero { margin-bottom: 26px; }
+.dc-hero-title { font-family: 'Fraunces', 'Manrope', serif; font-weight: 600; font-size: 26px; color: #0B2B3C; margin: 0 0 4px; }
+.dc-hero-sub { font-size: 13.5px; color: #5C7680; font-weight: 500; margin: 0; }
+
+.dc-grid { display: grid; gap: 18px; }
+.dc-grid-2 { grid-template-columns: repeat(2, 1fr); }
+.dc-grid-3 { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 900px) { .dc-grid-2, .dc-grid-3 { grid-template-columns: 1fr; } }
+
+.dc-card {
+  background: #fff;
+  border: 1px solid #DCEBE8;
+  border-radius: 16px;
+  padding: 20px 22px;
+  box-shadow: 0 1px 1px rgba(11, 43, 60, 0.02), 0 8px 22px rgba(6, 34, 32, 0.05);
+}
+.dc-card-title { font-size: 13.5px; font-weight: 800; color: #0B2B3C; margin: 0 0 2px; }
+.dc-card-sub { font-size: 11.5px; color: #5C7680; font-weight: 500; margin: 0 0 14px; }
+
+.dc-stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+@media (max-width: 900px) { .dc-stat-row { grid-template-columns: repeat(2, 1fr); } }
+.dc-stat-tile {
+  background: #fff; border: 1px solid #DCEBE8; border-radius: 16px; padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.dc-stat-label { font-size: 11px; font-weight: 700; color: #5C7680; text-transform: uppercase; letter-spacing: 0.3px; }
+.dc-stat-value { font-family: 'Manrope', sans-serif; font-size: 26px; font-weight: 800; color: #0B2B3C; }
+.dc-stat-delta { font-size: 11px; font-weight: 700; }
+.dc-stat-delta.dc-up { color: #0ca30c; }
+.dc-stat-delta.dc-down { color: #d03b3b; }
+
+.dc-quick-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+@media (max-width: 900px) { .dc-quick-actions { grid-template-columns: 1fr; } }
+.dc-quick-action {
+  display: flex; align-items: center; gap: 12px;
+  background: #fff; border: 1.5px solid #DCEBE8; border-radius: 14px; padding: 16px;
+  cursor: pointer; text-align: left; font-family: inherit;
+  transition: border-color 0.2s cubic-bezier(.22,.61,.36,1), transform 0.2s cubic-bezier(.22,.61,.36,1);
+}
+.dc-quick-action:hover { border-color: #0E9C8F; transform: translateY(-2px); }
+.dc-quick-action-icon {
+  width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0;
+  background: #F2F8F7; color: #0B7A70;
+  display: flex; align-items: center; justify-content: center;
+}
+.dc-quick-action-label { font-size: 13px; font-weight: 800; color: #0B2B3C; }
+.dc-quick-action-sub { font-size: 11px; font-weight: 500; color: #5C7680; margin-top: 1px; }
+
+.dc-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.2px;
+  padding: 4px 9px; border-radius: 999px;
+}
+
+.dc-list { display: flex; flex-direction: column; gap: 10px; }
+.dc-list-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 14px; border-radius: 12px; background: #F2F8F7; border: 1px solid #DCEBE8;
+}
+.dc-list-item-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.dc-list-avatar {
+  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  background: #fff; border: 1.5px solid #DCEBE8; color: #0B7A70;
+  display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 11.5px;
+}
+.dc-list-title { font-size: 13px; font-weight: 700; color: #0B2B3C; }
+.dc-list-sub { font-size: 11.5px; color: #5C7680; font-weight: 500; }
+.dc-list-meta { font-size: 11.5px; color: #5C7680; font-weight: 700; white-space: nowrap; }
+
+.dc-queue-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 13px 16px; border-radius: 12px; border: 1px solid #DCEBE8; background: #fff;
+}
+.dc-queue-row + .dc-queue-row { margin-top: 8px; }
+.dc-queue-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.dc-queue-name { font-size: 13.5px; font-weight: 800; color: #0B2B3C; }
+.dc-queue-condition { font-size: 11.5px; color: #5C7680; font-weight: 500; }
+.dc-queue-wait { font-size: 11px; color: #5C7680; font-weight: 700; white-space: nowrap; }
+
+.dc-chart-legend-note { font-size: 11px; color: #5C7680; font-weight: 500; margin-top: 10px; }
