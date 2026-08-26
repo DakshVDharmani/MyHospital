@@ -300,7 +300,7 @@ export function HealthcareScene({
         // --- Ambulance: static hero backdrop, parked and perfectly placed, never animated. ---
         const { wrapper: ambulanceWrapper } = groundAndCenter(ambulanceGltf.scene, 2.28);
         ambulanceWrapper.rotation.y = Math.PI * 0.62;
-        ambulanceWrapper.position.set(0.0, 0, -3.4);
+        ambulanceWrapper.position.set(0.3, 0, -3.4);
         worldGroup.add(ambulanceWrapper);
         ambulanceRef = ambulanceWrapper;
 
@@ -308,7 +308,7 @@ export function HealthcareScene({
         const rig = riggedDoctor(doctorGltf);
         if (rig) {
           rig.root.rotation.y = Math.PI * 0.1;
-          rig.root.position.set(0.58, 0, -0.05);
+          rig.root.position.set(0.88, 0, -0.05);
           addContactShadow(rig.root, 0.6, shadowTex);
           worldGroup.add(rig.root);
           doctorRig = rig;
@@ -320,7 +320,7 @@ export function HealthcareScene({
         // --- Nurse (static mesh, animated as a whole body) ---
         const { wrapper: nurseWrapper } = groundAndCenter(nurseGltf.scene, 1.76);
         nurseWrapper.rotation.y = -Math.PI * 0.12;
-        nurseWrapper.position.set(-0.07, 0, 0.15);
+        nurseWrapper.position.set(0.23, 0, 0.15);
         addContactShadow(nurseWrapper, 0.64, shadowTex);
         worldGroup.add(nurseWrapper);
         nurseGroup = nurseWrapper;
@@ -358,8 +358,13 @@ export function HealthcareScene({
           const eased = 1 - Math.pow(1 - p, 2.2);
           const vFov = (camera.fov * Math.PI) / 180;
           const dist = camera.position.z - ambulanceRef.position.z;
-          const halfWAtZ = Math.tan(vFov / 2) * dist * camera.aspect;
-          const endX = halfWAtZ + 3;
+          const h = mount.clientHeight || 1;
+          // World-units-per-pixel is set by the vertical FOV alone, independent of aspect — use it
+          // to find the true right edge of the (now full-screen) canvas even though the half-page
+          // lens-shift in resize() makes the frustum asymmetric rather than centered on-screen.
+          const worldPerPixel = (2 * Math.tan(vFov / 2) * dist) / h;
+          const rightEdge = worldPerPixel * (mount.clientWidth - baseWidthPx / 2);
+          const endX = rightEdge + 3;
           const x = drive.startX + (endX - drive.startX) * eased;
           ambulanceRef.position.x = x;
           ambulanceRef.position.y = Math.sin(now * 0.03) * 0.015;
@@ -435,7 +440,9 @@ export function HealthcareScene({
       // Widening the canvas re-centers the view (shifting doctor/nurse right). Use a lens-shift
       // (projection-only offset, no camera movement) so the original half is pixel-identical —
       // physically moving the camera instead causes parallax and makes static models look like
-      // they're turning.
+      // they're turning. This keeps the doctor/nurse from jumping when the canvas jumps to
+      // full-screen for the drive-off (see the endX math in tick(), which accounts for this
+      // same offset so the ambulance's exit point still matches the true edge of the screen).
       if (w > baseWidthPx) {
         camera.setViewOffset(w, h, (w - baseWidthPx) / 2, 0, w, h);
       } else {
