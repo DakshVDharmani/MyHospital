@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
+import { ProfileMenu } from './ProfileMenu';
 
 export interface NavItem {
   label: string;
@@ -40,13 +41,6 @@ export interface DashboardLayoutProps {
   navItems: NavItem[];
   alerts?: AlertItem[];
   children: ReactNode;
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 const DEFAULT_ALERTS: AlertItem[] = [
@@ -501,13 +495,7 @@ export function DashboardLayout({ roleLabel, name, eyebrow, pageTitle, navItems,
 
           <div className="dash-topbar-right">
             <AlertsBell alerts={alerts && alerts.length ? alerts : DEFAULT_ALERTS} />
-            <div className="dash-user-chip">
-              <div className="dash-avatar">{initials(name)}</div>
-              <div>
-                <div className="dash-user-name">{name}</div>
-                <div className="dash-user-role">{roleLabel}</div>
-              </div>
-            </div>
+            <ProfileMenu />
             <button className="dash-logout" onClick={handleLogout}>
               <LogOut size={13} /> Log out
             </button>
