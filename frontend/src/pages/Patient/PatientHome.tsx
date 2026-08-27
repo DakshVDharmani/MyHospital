@@ -1,17 +1,15 @@
-import { useEffect, useState } from 'react';
 import {
-  Home,
   MessageSquare,
-  CalendarDays,
   FileText,
-  FolderClock,
   CalendarPlus,
-  Pill,
   HeartPulse,
+  ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
 import { DashboardLayout } from '../../components/DashboardLayout';
 import { LineChart } from '../../components/charts/LineChart';
-import { supabase } from '../../lib/supabaseClient';
+import { useProfile } from '../../lib/useProfile';
+import { patientNav } from './nav';
 import '../../components/dashboard.css';
 
 const HEART_RATE: { label: string; value: number }[] = [
@@ -35,34 +33,25 @@ const MESSAGES = [
 ];
 
 export default function PatientHome() {
-  const [name, setName] = useState('there');
-
-  useEffect(() => {
-    let cancelled = false;
-    supabase.auth.getUser().then(({ data }) => {
-      if (cancelled) return;
-      const meta = data.user?.user_metadata as { name?: string } | undefined;
-      if (meta?.name) setName(meta.name.split(' ')[0]);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const navItems = [
-    { label: 'Home', icon: <Home size={16} />, active: true },
-    { label: 'Messages', icon: <MessageSquare size={16} /> },
-    { label: 'Appointments', icon: <CalendarDays size={16} /> },
-    { label: 'Prescriptions', icon: <Pill size={16} /> },
-    { label: 'Records', icon: <FolderClock size={16} /> },
-  ];
+  const { name, loading } = useProfile();
+  const firstName = loading ? '' : name.split(' ')[0];
 
   return (
-    <DashboardLayout roleLabel="Patient" name={name} navItems={navItems}>
-      <div className="dc-hero">
-        <h1 className="dc-hero-title">Welcome back, {name}.</h1>
-        <p className="dc-hero-sub">Here's what's happening with your care team today.</p>
-      </div>
+    <DashboardLayout roleLabel="Patient" name={loading ? '…' : name} eyebrow="Patient Portal" pageTitle="Home" navItems={patientNav('Home')}>
+      <section className="dc-hero">
+        <div className="dc-hero-inner">
+          <div className="dc-hero-eyebrow"><span className="dc-hero-eyebrow-dot" /> HealthForGood care network</div>
+          <h1 className="dc-hero-title">
+            {loading ? <span className="dc-skeleton" style={{ width: 260, height: 27, display: 'inline-block' }} /> : `Welcome back, ${firstName}.`}
+          </h1>
+          <p className="dc-hero-sub">Here's what's happening with your care team today — your vitals, appointments, and messages, all in one place.</p>
+          <div className="dc-hero-chips">
+            <div className="dc-hero-chip"><span className="dc-hero-chip-icon"><ShieldCheck size={12} /></span> HIPAA-aware care</div>
+            <div className="dc-hero-chip"><span className="dc-hero-chip-icon"><HeartPulse size={12} /></span> 2 upcoming visits</div>
+            <div className="dc-hero-chip"><span className="dc-hero-chip-icon"><Sparkles size={12} /></span> Care team online</div>
+          </div>
+        </div>
+      </section>
 
       <div className="dc-section">
         <div className="dc-quick-actions">
