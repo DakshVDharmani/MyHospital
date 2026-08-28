@@ -176,8 +176,15 @@ export function DashboardLayout({ roleLabel, name, eyebrow, pageTitle, navItems,
           --danger: #E5544A;
           --ease: cubic-bezier(.22,.61,.36,1);
 
-          min-height: 100vh;
+          /* A fixed (not min-) height so the whole app shell never grows past
+             the viewport — sidebar and topbar stay put, and this also gives
+             every descendant a real, definite height to resolve percentage
+             heights against (a plain min-height here left that undefined,
+             which is what let pages like XAI Help's "fill exactly one
+             screen" layout render at the wrong size / overflow its card). */
+          height: 100vh;
           display: flex;
+          overflow: hidden;
           background: var(--bg);
           font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
           color: var(--ink);
@@ -268,7 +275,7 @@ export function DashboardLayout({ roleLabel, name, eyebrow, pageTitle, navItems,
         }
         .dash-role-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 3px rgba(14,156,143,0.18); flex-shrink: 0; }
 
-        .dash-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+        .dash-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 
         /* ---------------- Topbar / navbar ---------------- */
         .dash-topbar {
@@ -429,7 +436,7 @@ export function DashboardLayout({ roleLabel, name, eyebrow, pageTitle, navItems,
 
         .dash-mobile-toggle { display: none; border: none; background: transparent; color: var(--navy); cursor: pointer; }
 
-        .dash-content { padding: 30px 32px 56px; flex: 1; }
+        .dash-content { padding: 30px 32px 56px; flex: 1; min-height: 0; overflow-y: auto; }
 
         @media (max-width: 900px) {
           .dash-sidebar {
