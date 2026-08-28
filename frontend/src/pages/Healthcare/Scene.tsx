@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
-const DOCTOR_URL = '/Healthcare/doctor.glb';
-const NURSE_URL = '/Healthcare/nurse.glb';
-const AMBULANCE_URL = '/Healthcare/ambulance.glb';
+const DOCTOR_URL = '/Healthcare/LoginPage/doctor.glb';
+const NURSE_URL = '/Healthcare/LoginPage/nurse.glb';
+const AMBULANCE_URL = '/Healthcare/LoginPage/ambulance.glb';
 
 /** How long (ms) after the last pointer move / keystroke before the staff go back to "usual". */
 const ACTIVITY_WINDOW_MS = 1100;

@@ -1,0 +1,296 @@
+/* ============================================================
+   XAI Help — design tokens
+   A warmer, calmer palette than a clinical dashboard: paper +
+   ink for trust and legibility, teal for "this is safe / good",
+   clay for "pay attention" (never siren-red — patients read this
+   alone, often without a clinician in the room).
+   ============================================================ */
+.xai-shell {
+  --xai-ink: #0b2b3c;
+  --xai-paper: #faf6ef;
+  --xai-panel: #ffffff;
+  --xai-teal: #0e7c74;
+  --xai-teal-deep: #0b5e58;
+  --xai-teal-soft: #e4f0ee;
+  --xai-clay: #bd5a3f;
+  --xai-clay-soft: #f5e2d9;
+  --xai-green: #1b8f72;
+  --xai-green-soft: #dfeee7;
+  --xai-amber: #b9832c;
+  --xai-amber-soft: #f6ead2;
+  --xai-sand: #e8e0d0;
+  --xai-muted: #6e7f82;
+
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  background: var(--xai-paper);
+  color: var(--xai-ink);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+@media (max-height: 760px) {
+  .xai-shell { gap: 10px; padding: 14px 18px; }
+}
+
+/* ---------- Header ---------- */
+.xai-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex: 0 0 auto;
+}
+.xai-header-copy h1 {
+  font-family: 'Fraunces', 'Manrope', serif;
+  font-weight: 600;
+  font-size: clamp(20px, 2.4vw, 26px);
+  margin: 0 0 4px;
+  color: var(--xai-ink);
+}
+.xai-header-copy p {
+  margin: 0;
+  max-width: 56ch;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--xai-muted);
+  line-height: 1.5;
+}
+.xai-header-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--xai-panel);
+  border: 1px solid var(--xai-sand);
+  border-radius: 999px;
+  padding: 6px 14px 6px 6px;
+  flex-shrink: 0;
+}
+.xai-header-badge-text { line-height: 1.25; }
+.xai-header-badge-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--xai-muted);
+}
+.xai-header-badge-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--xai-ink);
+}
+
+/* ---------- Insight picker (horizontal, replaces tall card list) ---------- */
+.xai-picker {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+.xai-pill {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--xai-sand);
+  background: var(--xai-panel);
+  border-radius: 14px;
+  padding: 8px 14px 8px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+  max-width: 260px;
+  text-align: left;
+}
+.xai-pill:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(11, 43, 60, 0.08); }
+.xai-pill.active {
+  border-color: var(--xai-teal);
+  box-shadow: 0 0 0 3px var(--xai-teal-soft);
+}
+.xai-pill-icon {
+  width: 26px; height: 26px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--xai-teal-soft); color: var(--xai-teal-deep);
+  flex-shrink: 0;
+}
+/* Flex items default to min-width:auto (won't shrink below their content's
+   natural size), which is exactly what let the title's text spill out past
+   the pill's own max-width instead of ellipsis-ing. min-width:0 here is what
+   actually lets it shrink to the space the pill has left. */
+.xai-pill-text {
+  min-width: 0;
+  overflow: hidden;
+}
+.xai-pill-title {
+  font-size: 12px; font-weight: 700; color: var(--xai-ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.xai-pill-sub {
+  font-size: 10.5px; font-weight: 600; color: var(--xai-muted);
+}
+
+/* ---------- Main split: graph (hero) + explanation panel ---------- */
+.xai-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 14px;
+}
+@media (max-width: 980px) {
+  .xai-main { grid-template-columns: 1fr; overflow-y: auto; }
+}
+
+.xai-graph-card, .xai-panel-card {
+  background: var(--xai-panel);
+  border: 1px solid var(--xai-sand);
+  border-radius: 20px;
+  padding: 18px 20px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.xai-graph-card {
+  box-shadow: 0 12px 30px -18px rgba(11, 43, 60, 0.35);
+}
+.xai-card-title {
+  font-size: 13px; font-weight: 800; color: var(--xai-ink); margin: 0;
+  display: flex; align-items: center; gap: 7px;
+}
+.xai-card-sub {
+  font-size: 11px; font-weight: 500; color: var(--xai-muted); margin: 3px 0 12px;
+}
+.xai-graph-stage {
+  flex: 1 1 auto;
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* ---------- Right panel: tabs so content never has to stack ---------- */
+.xai-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--xai-teal-soft);
+  border-radius: 12px;
+  padding: 3px;
+  margin-bottom: 14px;
+  flex: 0 0 auto;
+}
+.xai-tab {
+  flex: 1 1 0;
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  padding: 7px 10px;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--xai-teal-deep);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.xai-tab.active { background: var(--xai-panel); color: var(--xai-ink); box-shadow: 0 2px 6px rgba(11,43,60,0.1); }
+
+.xai-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 2px;
+}
+.xai-panel-body::-webkit-scrollbar { width: 6px; }
+.xai-panel-body::-webkit-scrollbar-thumb { background: var(--xai-sand); border-radius: 3px; }
+
+/* Factor bars */
+.xai-factor { display: flex; flex-direction: column; gap: 4px; }
+.xai-factor-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.xai-factor-label { font-size: 12px; font-weight: 700; color: var(--xai-ink); }
+.xai-factor-tag { font-size: 10px; font-weight: 800; white-space: nowrap; }
+.xai-factor-tag.pos { color: var(--xai-teal-deep); }
+.xai-factor-tag.neg { color: var(--xai-clay); }
+.xai-factor-track { height: 6px; border-radius: 4px; background: var(--xai-sand); overflow: hidden; }
+.xai-factor-fill { height: 100%; border-radius: 4px; }
+.xai-factor-fill.pos { background: linear-gradient(90deg, var(--xai-teal), var(--xai-teal-deep)); }
+.xai-factor-fill.neg { background: linear-gradient(90deg, #d3826c, var(--xai-clay)); }
+.xai-factor-note { font-size: 10.5px; font-weight: 500; color: var(--xai-muted); }
+
+/* Plain-language block */
+.xai-plain {
+  background: var(--xai-teal-soft);
+  border: 1px solid #cfe3df;
+  border-radius: 14px;
+  padding: 13px 14px;
+}
+.xai-plain-label {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase;
+  color: var(--xai-teal-deep); margin-bottom: 6px; display: flex; align-items: center; gap: 5px;
+}
+.xai-plain-text { font-size: 12.5px; font-weight: 500; line-height: 1.6; color: #123a3a; }
+
+.xai-feedback { display: flex; align-items: center; gap: 10px; }
+.xai-feedback span { font-size: 11px; font-weight: 700; color: var(--xai-muted); }
+.xai-icon-btn {
+  width: 30px; height: 30px; border-radius: 9px;
+  border: 1px solid var(--xai-sand); background: var(--xai-panel);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--xai-muted); transition: all 0.15s ease;
+}
+.xai-icon-btn.up.active { border-color: var(--xai-teal); color: var(--xai-teal-deep); background: var(--xai-teal-soft); }
+.xai-icon-btn.down.active { border-color: var(--xai-clay); color: var(--xai-clay); background: var(--xai-clay-soft); }
+
+/* Ask panel */
+.xai-ask-form { display: flex; gap: 8px; flex: 0 0 auto; }
+.xai-ask-input {
+  flex: 1 1 auto;
+  border: 1px solid var(--xai-sand);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  font-family: 'Manrope', sans-serif;
+  color: var(--xai-ink);
+  background: var(--xai-paper);
+}
+.xai-ask-input:focus { outline: 2px solid var(--xai-teal); outline-offset: 1px; }
+.xai-ask-send {
+  width: 38px; height: 38px; flex-shrink: 0; border-radius: 12px; border: none;
+  background: var(--xai-teal-deep); color: #fff; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background 0.15s ease;
+}
+.xai-ask-send:hover { background: var(--xai-teal); }
+.xai-ask-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; }
+.xai-ask-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border: 1px solid var(--xai-sand); border-radius: 12px; padding: 9px 12px; background: var(--xai-paper);
+}
+.xai-ask-item-text { font-size: 12px; font-weight: 600; color: var(--xai-ink); }
+.xai-ask-item-sub { font-size: 10px; font-weight: 600; color: var(--xai-muted); margin-top: 1px; }
+.xai-ask-status {
+  font-size: 10px; font-weight: 800; padding: 3px 9px; border-radius: 999px;
+  background: var(--xai-amber-soft); color: var(--xai-amber); white-space: nowrap;
+}
+.xai-ask-empty { font-size: 11.5px; font-weight: 500; color: var(--xai-muted); text-align: center; padding: 18px 8px; }
+
+/* Footer disclaimer — always one slim line, never pushes layout into scroll */
+.xai-footnote {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--xai-muted);
+}
+.xai-footnote strong { color: var(--xai-ink); font-weight: 800; }
+
+@media (prefers-reduced-motion: reduce) {
+  .xai-pill, .xai-icon-btn, .xai-ask-send, .xai-tab { transition: none; }
+}

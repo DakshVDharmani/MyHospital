@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { HeartPulse, Stethoscope, ShieldCheck } from 'lucide-react';
 import { HealthcareScene, type Activity } from './Scene';
 import { AuthForm, type AuthSubmitPayload } from './AuthForm';
 import type { Mode } from './AuthForm';
 import { supabase } from '../../lib/supabaseClient';
 
-// TODO: point this at the real destination once it's linked.
-const NEXT_PAGE_URL = '/healthcare/login';
-
 export default function HealthcareAuthPage() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>('login');
   const [loggingIn, setLoggingIn] = useState(false);
   const [pageFadeOut, setPageFadeOut] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const resolvedRoleRef = useRef<AuthSubmitPayload['role']>('patient');
 
   const activityRef = useRef<Activity>({ lastActivity: 0, passwordActive: false });
 
@@ -69,6 +69,7 @@ export default function HealthcareAuthPage() {
         const user = data.user;
         const role = (user.user_metadata?.role as AuthSubmitPayload['role']) ?? payload.role;
         const name = (user.user_metadata?.name as string) ?? payload.email;
+        resolvedRoleRef.current = role;
         const { error: profileError } = await supabase.from('users').upsert({
           id: user.id,
           name,
@@ -78,6 +79,7 @@ export default function HealthcareAuthPage() {
         if (profileError) throw profileError;
       }
 
+      if (payload.mode === 'signup') resolvedRoleRef.current = payload.role;
       setLoggingIn(true);
     } catch (err) {
       setSubmitting(false);
@@ -88,9 +90,9 @@ export default function HealthcareAuthPage() {
   const handleDriveOffDone = useCallback(() => {
     setPageFadeOut(true);
     window.setTimeout(() => {
-      window.location.href = NEXT_PAGE_URL;
+      navigate(resolvedRoleRef.current === 'doctor' ? '/doctor/home' : '/patient/home');
     }, 420);
-  }, []);
+  }, [navigate]);
 
   const switchMode = (next: Mode) => {
     setAuthError(null);
