@@ -55,6 +55,141 @@
   font-size: 12.5px;
 }
 
+/* ============================================================
+   Reasoning graph — restyled
+   Warm paper card, teal/clay factor accents, soft glow on the
+   conclusion, and a quiet staggered entrance so the "why" reads
+   as a built argument rather than a static chart.
+   ============================================================ */
+.chart-graph-wrap {
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+/* Fills its box exactly and lets the SVG's own viewBox scaling (default
+   preserveAspectRatio="xMidYMid meet") shrink or grow the graph to fit
+   without cropping — relying on intrinsic width/height + max-width/max-height
+   here silently failed whenever an ancestor flex box didn't have a fully
+   resolved height, letting the graph render past its card and get clipped. */
+.chart-graph-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Opacity-only on purpose: these <g> elements are positioned via an SVG
+   `transform="translate(x,y)"` attribute (computed by dagre). The instant a
+   CSS `transform` is applied to an SVG element — even just for an entrance
+   animation — browsers stop honoring that attribute entirely and every node
+   collapses to the same spot. Fading in (no transform) gets the same "it
+   builds itself" effect without fighting dagre's own positioning. */
+.rg-node {
+  opacity: 0;
+  animation: rg-node-in 0.42s ease forwards;
+}
+.rg-edge {
+  opacity: 0;
+  animation: rg-edge-in 0.5s ease forwards;
+}
+@keyframes rg-node-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes rg-edge-in {
+  from { opacity: 0; }
+  to { opacity: 0.5; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rg-node, .rg-edge { animation: none; opacity: 1; }
+}
+
+.rg-factor-card {
+  transition: filter 0.15s ease;
+}
+.chart-graph-conclusion-label {
+  font-family: 'Manrope', sans-serif;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  fill: rgba(255, 255, 255, 0.78);
+}
+.chart-graph-conclusion-title {
+  font-family: 'Fraunces', 'Manrope', serif;
+  font-weight: 600;
+  font-size: 12.5px;
+  line-height: 1.32;
+  color: #fff;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  word-break: break-word;
+}
+.chart-graph-factor {
+  font-family: 'Manrope', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.chart-graph-factor-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #0B2B3C;
+  line-height: 1.28;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  word-break: break-word;
+}
+.chart-graph-factor-meta {
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.chart-graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 10px;
+  flex: 0 0 auto;
+}
+.chart-graph-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #5C7680;
+}
+.chart-graph-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.chart-graph-legend-note {
+  font-weight: 500;
+  color: #A9A08A;
+}
+
 .chart-sr-table {
   position: absolute;
   width: 1px;
