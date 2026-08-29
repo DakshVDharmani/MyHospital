@@ -160,7 +160,7 @@ export function VoiceWidget({ backendUrl, defaultLang }: VoiceWidgetProps) {
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? "Close assistant" : "Open assistant"}
       >
-        <GhostMascot size={62} status={asst.status} listening={asst.listening} />
+        <GhostMascot size={67} status={asst.status} listening={asst.listening} />
       </button>
     </div>
   );

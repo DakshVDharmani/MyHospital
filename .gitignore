@@ -4,3 +4,13 @@ dist
 .vscode
 .env
 .env.local
+
+# ml/ — the raw dataset (~99MB, right under GitHub's 100MB hard limit — too
+# risky to track) and its generated splits are reproducible from a fresh
+# Kaggle download; weights/ is what's meant to survive and get committed.
+ml/.venv
+ml/database/*.rdata
+ml/database/train.csv
+ml/database/valid.csv
+ml/database/test.csv
+ml/database/*.zip

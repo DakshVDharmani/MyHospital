@@ -5,6 +5,7 @@ import { HealthcareScene, type Activity } from './Scene';
 import { AuthForm, type AuthSubmitPayload } from './AuthForm';
 import type { Mode } from './AuthForm';
 import { supabase } from '../../lib/supabaseClient';
+import { WordCycle } from '../../components/WordCycle';
 
 export default function HealthcareAuthPage() {
   const navigate = useNavigate();
@@ -29,6 +30,52 @@ export default function HealthcareAuthPage() {
       window.removeEventListener('keydown', markActivity);
     };
   }, [markActivity]);
+
+  // Finish a Google sign-in after the OAuth redirect lands back on /login.
+  // Gated on the `mh_pending_role` flag we set before redirecting, so a normal
+  // password login (or a pre-existing session) doesn't trip this.
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event !== 'SIGNED_IN' || !session) return;
+      const pendingRole = localStorage.getItem('mh_pending_role') as AuthSubmitPayload['role'] | null;
+      if (!pendingRole) return;
+
+      try {
+        const user = session.user;
+        const { data: row } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+        const role = (row?.role as AuthSubmitPayload['role']) || pendingRole;
+        const name =
+          (user.user_metadata?.full_name as string) ||
+          (user.user_metadata?.name as string) ||
+          user.email ||
+          'there';
+
+        const { error: profileError } = await supabase
+          .from('users')
+          .upsert({ id: user.id, name, email: user.email, role });
+        if (profileError) throw profileError;
+
+        // Mirror role/name into auth metadata so the access-token JWT carries
+        // them — the appointments API reads role from `user_metadata.role`.
+        if (user.user_metadata?.role !== role || !user.user_metadata?.name) {
+          await supabase.auth.updateUser({ data: { role, name } });
+        }
+
+        localStorage.removeItem('mh_pending_role');
+        resolvedRoleRef.current = role;
+        setLoggingIn(true);
+      } catch (err) {
+        localStorage.removeItem('mh_pending_role');
+        setSubmitting(false);
+        setAuthError(err instanceof Error ? err.message : 'Google sign-in failed.');
+      }
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
   const handleSubmit = useCallback(async (payload: AuthSubmitPayload) => {
     if (submitting) return;
@@ -87,6 +134,20 @@ export default function HealthcareAuthPage() {
     }
   }, [submitting]);
 
+  const handleGoogle = useCallback(async (role: AuthSubmitPayload['role']) => {
+    setAuthError(null);
+    // Remember the chosen role across the OAuth round-trip.
+    localStorage.setItem('mh_pending_role', role);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/login` },
+    });
+    if (error) {
+      localStorage.removeItem('mh_pending_role');
+      setAuthError(error.message);
+    }
+  }, []);
+
   const handleDriveOffDone = useCallback(() => {
     setPageFadeOut(true);
     window.setTimeout(() => {
@@ -124,24 +185,15 @@ export default function HealthcareAuthPage() {
           width: 100%;
           display: flex;
           background:
-            radial-gradient(120% 90% at 15% 0%, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 45%),
-            linear-gradient(90deg, #0F8F84 0%, #0B6E67 100%);
+            radial-gradient(120% 85% at 12% -5%, rgba(128,244,224,0.14) 0%, rgba(128,244,224,0) 46%),
+            radial-gradient(90% 80% at 100% 100%, rgba(6,44,42,0.55) 0%, rgba(6,44,42,0) 60%),
+            linear-gradient(158deg, #0E5C58 0%, #0B4B47 46%, #072E2C 100%);
           font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
           overflow: hidden;
           position: relative;
         }
         .hc-page *, .hc-page *::before, .hc-page *::after { box-sizing: border-box; }
-        .hc-page::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background-image:
-            linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
-          background-size: 44px 44px;
-          mask-image: radial-gradient(140% 100% at 50% 40%, black 35%, transparent 90%);
-          pointer-events: none;
-        }
+        .hc-page::before { display: none; }
         .hc-page::after {
           content: '';
           position: absolute;
@@ -255,9 +307,10 @@ export default function HealthcareAuthPage() {
           font-size: 32px;
           line-height: 1.18;
           margin: 0 0 10px;
-          max-width: 380px;
+          max-width: 420px;
           text-shadow: 0 2px 18px rgba(0,0,0,0.12);
         }
+        .hc-cycle { min-width: 6.4em; text-align: left; color: #8df0dd; }
         .hc-visual-copy p {
           font-size: 14px;
           font-weight: 500;
@@ -587,27 +640,32 @@ export default function HealthcareAuthPage() {
           white-space: nowrap;
         }
 
-        .hc-social-row {
-          display: flex;
-          gap: 12px;
-        }
         .hc-social-btn {
-          flex: 1;
+          width: 100%;
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 8px;
-          height: 38px;
+          gap: 10px;
+          height: 42px;
           border-radius: 12px;
           border: 1.5px solid var(--line);
           background: #fff;
           color: var(--ink);
-          font-size: 12.5px;
+          font-family: 'Manrope', sans-serif;
+          font-size: 13px;
           font-weight: 700;
+          letter-spacing: 0.2px;
           cursor: pointer;
-          transition: transform 0.18s var(--ease), border-color 0.18s var(--ease);
+          transition: transform 0.18s var(--ease), border-color 0.18s var(--ease), box-shadow 0.18s var(--ease), background 0.18s var(--ease);
         }
         .hc-social-btn:hover { transform: translateY(-2px); border-color: var(--teal); }
+        .hc-social-btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+        .hc-social-btn-google:hover {
+          background: #F7FAFF;
+          border-color: var(--accent);
+          box-shadow: 0 8px 20px rgba(44, 127, 242, 0.14);
+        }
+        .hc-social-btn-google svg { flex-shrink: 0; }
 
         .hc-switch-note {
           text-align: center;
@@ -653,7 +711,16 @@ export default function HealthcareAuthPage() {
         </div>
 
         <div className="hc-visual-copy">
-          <h1>{mode === 'login' ? 'Care that shows up on time.' : 'Join the HealthForGood network.'}</h1>
+          <h1>
+            {mode === 'login' ? (
+              'Care that shows up on time.'
+            ) : (
+              <>
+                Join the <WordCycle words={['HealthForGood', 'MyHospital']} className="hc-cycle" />{' '}
+                network.
+              </>
+            )}
+          </h1>
           <p>
             {mode === 'login'
               ? 'Sign in as a doctor or patient to connect with your HealthForGood care team.'
@@ -680,6 +747,7 @@ export default function HealthcareAuthPage() {
             switchMode={switchMode}
             activityRef={activityRef}
             onSubmit={handleSubmit}
+            onGoogle={handleGoogle}
             submitting={submitting}
             error={authError}
           />

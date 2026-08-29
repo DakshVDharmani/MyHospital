@@ -331,16 +331,15 @@ export function DashboardLayout({ roleLabel, name, eyebrow, pageTitle, navItems,
           z-index: 10;
         }
 
-        /* Matches the navbar's own height + border-bottom exactly (both are a
-           fixed height, not padding-driven, so they can't drift out of sync),
-           with no border-right of its own — the two borders read as one
-           unbroken line across the full page width instead of meeting in a
-           seam/corner. */
+        /* Matches the navbar's own height exactly (both are a fixed height,
+           not padding-driven, so they can't drift out of sync) and has no
+           border of its own — the sidebar's vertical border and the navbar's
+           bottom border meet at a single corner instead of a line cutting
+           under the logo too. */
         .dash-brand {
           display: flex; align-items: center; gap: 10px;
           height: 69px;
           padding: 0 20px;
-          border-bottom: 1px solid var(--line);
           flex-shrink: 0;
           box-sizing: border-box;
         }

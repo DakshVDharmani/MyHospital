@@ -4,6 +4,7 @@ import HealthcareAuthPage from "./pages/Healthcare/AuthPage";
 import PatientHome from "./pages/Patient/PatientHome";
 import PatientSecureChat from "./pages/Patient/SecureChat";
 import PatientConsultation from "./pages/Patient/Consultation";
+import PatientAppointments from "./pages/Patient/Appointments";
 import PatientVitals from "./pages/Patient/Vitals";
 import PatientMedicalRecords from "./pages/Patient/MedicalRecords";
 import PatientXaiHelp from "./pages/Patient/XaiHelp";
@@ -13,10 +14,12 @@ import DoctorManagingPatients from "./pages/Doctor/ManagingPatients";
 import DoctorConsultation from "./pages/Doctor/Consultation";
 import DoctorAppointments from "./pages/Doctor/Appointments";
 import { VoiceWidget } from "./voice-widget/VoiceWidget";
+import { RouteTransition } from "./components/RouteTransition";
 
 function App() {
   return (
     <BrowserRouter>
+      <RouteTransition>
       <VoiceWidget backendUrl={import.meta.env.VITE_VOICE_BACKEND_URL} />
       <Routes>
         <Route path="/" element={<LandingPage />} />
@@ -26,6 +29,7 @@ function App() {
         <Route path="/patient/home" element={<PatientHome />} />
         <Route path="/patient/chat" element={<PatientSecureChat />} />
         <Route path="/patient/consultation" element={<PatientConsultation />} />
+        <Route path="/patient/appointments" element={<PatientAppointments />} />
         <Route path="/patient/vitals" element={<PatientVitals />} />
         <Route path="/patient/records" element={<PatientMedicalRecords />} />
         <Route path="/patient/xai" element={<PatientXaiHelp />} />
@@ -38,6 +42,7 @@ function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </RouteTransition>
     </BrowserRouter>
   );
 }
