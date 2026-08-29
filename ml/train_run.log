@@ -1,0 +1,18 @@
+Train: 390620 rows · Val: 83704 rows · Features: 569
+Encoded feature count: 583
+[1/12] val_mae=0.4082 best_iter=556 (54.4s) params={'max_depth': 7, 'learning_rate': 0.23915714741018157, 'subsample': 0.892797576724562, 'colsample_bytree': 0.7993292420985183, 'min_child_weight': 7, 'reg_lambda': 2.060414634987569}
+[2/12] val_mae=0.4101 best_iter=795 (73.5s) params={'max_depth': 6, 'learning_rate': 0.13103475623249078, 'subsample': 0.7334834444556088, 'colsample_bytree': 0.5714334089609704, 'min_child_weight': 3, 'reg_lambda': 0.5720457300353086}
+[3/12] val_mae=0.4110 best_iter=799 (91.7s) params={'max_depth': 5, 'learning_rate': 0.18883972989870143, 'subsample': 0.9754210836063001, 'colsample_bytree': 0.5003893829205072, 'min_child_weight': 5, 'reg_lambda': 2.661185283697008}
+[4/12] val_mae=0.4126 best_iter=796 (71.2s) params={'max_depth': 5, 'learning_rate': 0.14544641495909233, 'subsample': 0.7727780074568463, 'colsample_bytree': 0.645614570099021, 'min_child_weight': 3, 'reg_lambda': 1.8386169694350696}
+[5/12] val_mae=0.4079 best_iter=707 (74.4s) params={'max_depth': 7, 'learning_rate': 0.16033120514964935, 'subsample': 0.6185801650879991, 'colsample_bytree': 0.8037724259507192, 'min_child_weight': 5, 'reg_lambda': 2.0767473818934006}
+[6/12] val_mae=0.4089 best_iter=799 (72.5s) params={'max_depth': 5, 'learning_rate': 0.23875481819573333, 'subsample': 0.9862528132298237, 'colsample_bytree': 0.9041986740582306, 'min_child_weight': 9, 'reg_lambda': 0.5558818827707497}
+[7/12] val_mae=0.4113 best_iter=792 (71.7s) params={'max_depth': 5, 'learning_rate': 0.1805312658326745, 'subsample': 0.7760609974958406, 'colsample_bytree': 0.5610191174223894, 'min_child_weight': 8, 'reg_lambda': 0.6203598239032644}
+[8/12] val_mae=0.4060 best_iter=787 (85.5s) params={'max_depth': 9, 'learning_rate': 0.11603333366611297, 'subsample': 0.672894435115225, 'colsample_bytree': 0.8776807051588262, 'min_child_weight': 6, 'reg_lambda': 1.227795820038661}
+[9/12] val_mae=0.4148 best_iter=799 (82.6s) params={'max_depth': 7, 'learning_rate': 0.07066798021561595, 'subsample': 0.9878338511058234, 'colsample_bytree': 0.8875664116805573, 'min_child_weight': 2, 'reg_lambda': 1.8830258260063504}
+[10/12] val_mae=0.4069 best_iter=796 (74.7s) params={'max_depth': 7, 'learning_rate': 0.16153799533843874, 'subsample': 0.9687496940092467, 'colsample_bytree': 0.5442462510259598, 'min_child_weight': 7, 'reg_lambda': 2.322919910090383}
+[11/12] val_mae=0.4055 best_iter=798 (87.0s) params={'max_depth': 9, 'learning_rate': 0.10157267276791815, 'subsample': 0.7554709158757928, 'colsample_bytree': 0.6356745158869479, 'min_child_weight': 5, 'reg_lambda': 2.5536290798234687}
+[12/12] val_mae=0.4261 best_iter=799 (72.7s) params={'max_depth': 4, 'learning_rate': 0.09180559213122377, 'subsample': 0.8170784332632994, 'colsample_bytree': 0.5704621124873813, 'min_child_weight': 1, 'reg_lambda': 0.5547274235941788}
+
+Best val MAE: 0.4055 (risk scale is 1-5)
+Best params: {'max_depth': 9, 'learning_rate': 0.10157267276791815, 'subsample': 0.7554709158757928, 'colsample_bytree': 0.6356745158869479, 'min_child_weight': 5, 'reg_lambda': 2.5536290798234687}
+Saved model bundle -> C:\JPMC\MyHospital\ml\weights\model.joblib

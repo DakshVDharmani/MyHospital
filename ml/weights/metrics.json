@@ -1,0 +1,141 @@
+{
+  "n_test_rows": 83705,
+  "mae_risk_scale_1_5": 0.4059852402474132,
+  "rmse_risk_scale_1_5": 0.541395216369163,
+  "nearest_label_accuracy": 0.682492085299564,
+  "per_class_accuracy": {
+    "ESI 5": 0.32793522267206476,
+    "ESI 4": 0.6822036158071569,
+    "ESI 3": 0.7749118103569916,
+    "ESI 2": 0.6254790052996331,
+    "ESI 1": 0.19873417721518988
+  },
+  "confusion_matrix": {
+    "labels": [
+      "ESI 5",
+      "ESI 4",
+      "ESI 3",
+      "ESI 2",
+      "ESI 1"
+    ],
+    "matrix": [
+      [
+        1377,
+        2353,
+        453,
+        16,
+        0
+      ],
+      [
+        522,
+        12792,
+        5262,
+        175,
+        0
+      ],
+      [
+        43,
+        3406,
+        27459,
+        4524,
+        3
+      ],
+      [
+        3,
+        382,
+        8674,
+        15343,
+        128
+      ],
+      [
+        1,
+        7,
+        128,
+        497,
+        157
+      ]
+    ]
+  },
+  "top_feature_importances": [
+    [
+      "numeric__cc_suture/stapleremoval",
+      0.030717680230736732
+    ],
+    [
+      "numeric__cc_dentalpain",
+      0.022058339789509773
+    ],
+    [
+      "categorical__arrivalmode_Unknown",
+      0.020202457904815674
+    ],
+    [
+      "numeric__cc_strokealert",
+      0.017072174698114395
+    ],
+    [
+      "numeric__cc_neurologicproblem",
+      0.016885872930288315
+    ],
+    [
+      "categorical__arrivalmode_ambulance",
+      0.01392188761383295
+    ],
+    [
+      "numeric__cc_anklepain",
+      0.01286434754729271
+    ],
+    [
+      "numeric__cc_kneepain",
+      0.012834521010518074
+    ],
+    [
+      "numeric__cc_ankleinjury",
+      0.012412749230861664
+    ],
+    [
+      "numeric__cc_fulltrauma",
+      0.012276127934455872
+    ],
+    [
+      "numeric__cc_cardiacarrest",
+      0.012004396878182888
+    ],
+    [
+      "numeric__cc_suicidal",
+      0.011928882449865341
+    ],
+    [
+      "numeric__cc_abdominalpainpregnant",
+      0.011673575267195702
+    ],
+    [
+      "numeric__cc_chestpain",
+      0.011062712408602238
+    ],
+    [
+      "numeric__cc_rash",
+      0.010813521221280098
+    ],
+    [
+      "numeric__cc_psychiatricevaluation",
+      0.010240592062473297
+    ],
+    [
+      "numeric__cc_bodyfluidexposure",
+      0.009912707842886448
+    ],
+    [
+      "numeric__cc_earpain",
+      0.00990599300712347
+    ],
+    [
+      "numeric__cc_footinjury",
+      0.009885258041322231
+    ],
+    [
+      "numeric__cc_skinirritation",
+      0.009396207518875599
+    ]
+  ]
+}
