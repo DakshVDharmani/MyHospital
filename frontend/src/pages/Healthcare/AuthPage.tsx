@@ -30,6 +30,46 @@ export default function HealthcareAuthPage() {
     };
   }, [markActivity]);
 
+  // Finish a Google sign-in after the OAuth redirect lands back on /login.
+  // Gated on the `mh_pending_role` flag we set before redirecting, so a normal
+  // password login (or a pre-existing session) doesn't trip this.
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event !== 'SIGNED_IN' || !session) return;
+      const pendingRole = localStorage.getItem('mh_pending_role') as AuthSubmitPayload['role'] | null;
+      if (!pendingRole) return;
+
+      try {
+        const user = session.user;
+        const { data: row } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+        const role = (row?.role as AuthSubmitPayload['role']) || pendingRole;
+        const name =
+          (user.user_metadata?.full_name as string) ||
+          (user.user_metadata?.name as string) ||
+          user.email ||
+          'there';
+
+        const { error: profileError } = await supabase
+          .from('users')
+          .upsert({ id: user.id, name, email: user.email, role });
+        if (profileError) throw profileError;
+
+        localStorage.removeItem('mh_pending_role');
+        resolvedRoleRef.current = role;
+        setLoggingIn(true);
+      } catch (err) {
+        localStorage.removeItem('mh_pending_role');
+        setSubmitting(false);
+        setAuthError(err instanceof Error ? err.message : 'Google sign-in failed.');
+      }
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
   const handleSubmit = useCallback(async (payload: AuthSubmitPayload) => {
     if (submitting) return;
     setAuthError(null);
@@ -86,6 +126,20 @@ export default function HealthcareAuthPage() {
       setAuthError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     }
   }, [submitting]);
+
+  const handleGoogle = useCallback(async (role: AuthSubmitPayload['role']) => {
+    setAuthError(null);
+    // Remember the chosen role across the OAuth round-trip.
+    localStorage.setItem('mh_pending_role', role);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/login` },
+    });
+    if (error) {
+      localStorage.removeItem('mh_pending_role');
+      setAuthError(error.message);
+    }
+  }, []);
 
   const handleDriveOffDone = useCallback(() => {
     setPageFadeOut(true);
@@ -587,27 +641,32 @@ export default function HealthcareAuthPage() {
           white-space: nowrap;
         }
 
-        .hc-social-row {
-          display: flex;
-          gap: 12px;
-        }
         .hc-social-btn {
-          flex: 1;
+          width: 100%;
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 8px;
-          height: 38px;
+          gap: 10px;
+          height: 42px;
           border-radius: 12px;
           border: 1.5px solid var(--line);
           background: #fff;
           color: var(--ink);
-          font-size: 12.5px;
+          font-family: 'Manrope', sans-serif;
+          font-size: 13px;
           font-weight: 700;
+          letter-spacing: 0.2px;
           cursor: pointer;
-          transition: transform 0.18s var(--ease), border-color 0.18s var(--ease);
+          transition: transform 0.18s var(--ease), border-color 0.18s var(--ease), box-shadow 0.18s var(--ease), background 0.18s var(--ease);
         }
         .hc-social-btn:hover { transform: translateY(-2px); border-color: var(--teal); }
+        .hc-social-btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+        .hc-social-btn-google:hover {
+          background: #F7FAFF;
+          border-color: var(--accent);
+          box-shadow: 0 8px 20px rgba(44, 127, 242, 0.14);
+        }
+        .hc-social-btn-google svg { flex-shrink: 0; }
 
         .hc-switch-note {
           text-align: center;
@@ -680,6 +739,7 @@ export default function HealthcareAuthPage() {
             switchMode={switchMode}
             activityRef={activityRef}
             onSubmit={handleSubmit}
+            onGoogle={handleGoogle}
             submitting={submitting}
             error={authError}
           />
