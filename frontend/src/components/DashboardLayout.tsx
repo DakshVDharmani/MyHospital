@@ -11,10 +11,18 @@ import {
   AlertTriangle,
   Info,
   Check,
+  Stethoscope,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
+import { displayDoctorName } from '../lib/formatName';
 import { ProfileMenu } from './ProfileMenu';
+
+interface DoctorResult {
+  id: string;
+  name: string;
+  email: string;
+}
 
 export interface NavItem {
   label: string;
@@ -147,9 +155,125 @@ function AlertsBell({ alerts }: { alerts: AlertItem[] }) {
   );
 }
 
+/** Navbar search that queries the `users` table live for doctors matching
+ * what's typed. Selecting a result hands the doctor off to the caller
+ * (e.g. to route a patient into booking a consultation with them). */
+function DoctorSearch({ onSelect }: { onSelect: (doctor: DoctorResult) => void }) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<DoctorResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // So a doctor searching this box never finds their own profile in it
+  // (relevant once this also searches patients — a doctor is never their
+  // own patient, but this keeps the exclusion in one place either way).
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) setCurrentUserId(data.user?.id ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < 2) {
+      setResults([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const handle = window.setTimeout(async () => {
+      let q = supabase
+        .from('users')
+        .select('id, name, email')
+        .eq('role', 'doctor')
+        .ilike('name', `%${term}%`);
+      if (currentUserId) q = q.neq('id', currentUserId);
+      const { data, error } = await q.order('name').limit(6);
+      setLoading(false);
+      if (!error) setResults(data ?? []);
+    }, 260);
+    return () => window.clearTimeout(handle);
+  }, [query, currentUserId]);
+
+  const showPanel = open && query.trim().length >= 2;
+
+  return (
+    <div className="dash-search" ref={wrapRef}>
+      <Search size={14} />
+      <input
+        placeholder="Search doctors by name…"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => query.trim().length >= 2 && setOpen(true)}
+      />
+      <span className="dash-search-kbd">⌘K</span>
+
+      {showPanel && (
+        <div className="dash-search-panel" role="listbox">
+          {loading && <div className="dash-search-status">Searching…</div>}
+          {!loading && results.length === 0 && (
+            <div className="dash-search-status">No doctors found for &ldquo;{query.trim()}&rdquo;.</div>
+          )}
+          {!loading &&
+            results.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                className="dash-search-item"
+                onClick={() => {
+                  setOpen(false);
+                  setQuery(displayDoctorName(d.name));
+                  onSelect(d);
+                }}
+              >
+                <span className="dash-search-item-avatar">
+                  <Stethoscope size={13} />
+                </span>
+                <span className="dash-search-item-text">
+                  <span className="dash-search-item-name">{displayDoctorName(d.name)}</span>
+                  <span className="dash-search-item-email">{d.email}</span>
+                </span>
+              </button>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function DashboardLayout({ roleLabel, name, eyebrow, pageTitle, navItems, alerts, children }: DashboardLayoutProps) {
   const navigate = useNavigate();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  const handleDoctorSelect = (_doctor: DoctorResult) => {
+    // The only page that does anything with a chosen doctor today is the
+    // patient booking flow — a doctor searching the same directory just
+    // gets the picked name filled into the box, no navigation.
+    if (roleLabel === 'Patient') navigate('/patient/consultation');
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -297,14 +421,60 @@ export function DashboardLayout({ roleLabel, name, eyebrow, pageTitle, navItems,
 
         .dash-search {
           display: none;
-          align-items: center; gap: 8px;
-          background: var(--field-bg); border: 1.5px solid var(--line); border-radius: 10px;
-          padding: 8px 12px; min-width: 220px;
+          position: relative;
+          align-items: center; gap: 9px;
+          background: var(--field-bg); border: 1.5px solid var(--line); border-radius: 999px;
+          padding: 9px 14px; min-width: 320px; max-width: 480px; flex: 1;
           color: var(--ink-soft);
+          transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), background 0.2s var(--ease);
         }
-        .dash-search input { border: none; background: transparent; outline: none; font-size: 12.5px; font-weight: 600; color: var(--ink); width: 100%; font-family: 'Manrope', sans-serif; }
+        .dash-search:focus-within {
+          border-color: var(--teal);
+          box-shadow: 0 0 0 4px rgba(14, 156, 143, 0.12);
+          background: #fff;
+        }
+        .dash-search > svg { flex-shrink: 0; color: #7C9A9A; transition: color 0.2s var(--ease); }
+        .dash-search:focus-within > svg { color: var(--teal-deep); }
+        .dash-search input { border: none; background: transparent; outline: none; font-size: 13px; font-weight: 600; color: var(--ink); width: 100%; font-family: 'Manrope', sans-serif; }
         .dash-search input::placeholder { color: #9BB0AE; font-weight: 500; }
-        @media (min-width: 1080px) { .dash-search { display: flex; } }
+        .dash-search-kbd {
+          flex-shrink: 0;
+          font-size: 10px; font-weight: 800; letter-spacing: 0.3px;
+          color: #9BB0AE;
+          background: var(--bg);
+          border: 1px solid var(--line);
+          border-radius: 6px;
+          padding: 2px 6px;
+        }
+        @media (min-width: 980px) { .dash-search { display: flex; } }
+        @media (max-width: 1240px) { .dash-search { min-width: 240px; } }
+
+        .dash-search-panel {
+          position: absolute; top: calc(100% + 10px); left: 0; right: 0;
+          background: var(--card-bg);
+          border: 1px solid var(--line);
+          border-radius: 14px;
+          box-shadow: 0 2px 6px rgba(11, 43, 60, 0.06), 0 22px 48px rgba(6, 34, 32, 0.16);
+          z-index: 40;
+          overflow: hidden;
+          animation: dash-alert-in 0.16s var(--ease);
+        }
+        .dash-search-status { padding: 14px 16px; font-size: 12px; font-weight: 600; color: var(--ink-soft); }
+        .dash-search-item {
+          width: 100%; display: flex; align-items: center; gap: 10px;
+          padding: 10px 14px; border: none; background: transparent; cursor: pointer; text-align: left;
+          font-family: inherit;
+          transition: background 0.16s var(--ease);
+        }
+        .dash-search-item:hover, .dash-search-item:focus-visible { background: #F2F8F7; outline: none; }
+        .dash-search-item-avatar {
+          width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
+          background: rgba(14, 156, 143, 0.12); color: var(--teal-deep);
+          display: flex; align-items: center; justify-content: center;
+        }
+        .dash-search-item-text { min-width: 0; display: flex; flex-direction: column; }
+        .dash-search-item-name { font-size: 12.5px; font-weight: 800; color: var(--navy); }
+        .dash-search-item-email { font-size: 11px; font-weight: 600; color: var(--ink-soft); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
         .dash-topbar-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
         .dash-icon-btn {
@@ -495,10 +665,7 @@ export function DashboardLayout({ roleLabel, name, eyebrow, pageTitle, navItems,
             </div>
           </div>
 
-          <div className="dash-search">
-            <Search size={14} />
-            <input placeholder="Search patients, records, messages…" />
-          </div>
+          <DoctorSearch onSelect={handleDoctorSelect} />
 
           <div className="dash-topbar-right">
             <AlertsBell alerts={alerts && alerts.length ? alerts : DEFAULT_ALERTS} />
