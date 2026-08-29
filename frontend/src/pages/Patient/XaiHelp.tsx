@@ -7,17 +7,24 @@ import {
   ThumbsUp,
   ThumbsDown,
   ArrowRight,
+  MessageCircleQuestion,
+  HeartPulse,
+  Pill,
 } from 'lucide-react';
 import { DashboardLayout } from '../../components/DashboardLayout';
+import { ReasoningGraph } from '../../components/charts/ReasoningGraph';
+import { ConfidenceRing } from '../../components/charts/ConfidenceRing';
 import { useProfile } from '../../lib/useProfile';
 import { patientNav } from './nav';
 import '../../components/dashboard.css';
+import '../../components/charts/xai-page.css';
 
 interface Insight {
   id: string;
   title: string;
   summary: string;
   confidence: number;
+  icon: 'heart' | 'pill';
   factors: { label: string; weight: number; direction: 'pos' | 'neg'; note: string }[];
   plain: string;
 }
@@ -28,6 +35,7 @@ const INSIGHTS: Insight[] = [
     title: 'Your cardiovascular risk is low this quarter',
     summary: 'Based on your vitals, labs and activity over the last 90 days.',
     confidence: 88,
+    icon: 'heart',
     plain:
       'Your blood pressure and resting heart rate have stayed within a healthy band, and your recent lipid panel improved. Keeping up your current activity level is the single biggest driver keeping this estimate low.',
     factors: [
@@ -43,6 +51,7 @@ const INSIGHTS: Insight[] = [
     title: 'Medication reminder timing suggestion',
     summary: 'The model suggests moving your evening dose 1 hour earlier.',
     confidence: 71,
+    icon: 'pill',
     plain:
       'Your logged adherence dips on days with late-evening reminders. Shifting the reminder to 8 PM lines up with days you rarely miss a dose.',
     factors: [
@@ -56,11 +65,18 @@ const INSIGHTS: Insight[] = [
 export default function PatientXaiHelp() {
   const { name, loading } = useProfile();
   const [activeId, setActiveId] = useState(INSIGHTS[0].id);
+  const [tab, setTab] = useState<'explain' | 'ask'>('explain');
   const [vote, setVote] = useState<Record<string, 'up' | 'down'>>({});
   const [question, setQuestion] = useState('');
   const [asked, setAsked] = useState<string[]>([]);
 
   const active = INSIGHTS.find((i) => i.id === activeId)!;
+
+  const submitQuestion = () => {
+    if (!question.trim()) return;
+    setAsked((a) => [question.trim(), ...a]);
+    setQuestion('');
+  };
 
   return (
     <DashboardLayout
@@ -70,115 +86,137 @@ export default function PatientXaiHelp() {
       pageTitle="XAI Help"
       navItems={patientNav('XAI Help')}
     >
-      <div className="dc-page-intro">
-        <h1>Explainable AI help</h1>
-        <p>Whenever our system makes a health suggestion, this page shows you exactly <em>why</em> — which of your data points pushed the estimate up or down, and how sure the model is.</p>
-      </div>
-
-      <div className="dc-grid dc-grid-2 dc-section" style={{ alignItems: 'start' }}>
-        <div className="dc-card">
-          <div className="dc-card-title"><Brain size={14} style={{ verticalAlign: -2, marginRight: 6 }} />AI insights about you</div>
-          <div className="dc-card-sub">Select one to see the full explanation</div>
-          <div className="dc-list">
-            {INSIGHTS.map((i) => (
-              <button
-                key={i.id}
-                className="dc-list-item"
-                style={{ cursor: 'pointer', border: i.id === activeId ? '1px solid #0E9C8F' : undefined, background: i.id === activeId ? '#fff' : undefined }}
-                onClick={() => setActiveId(i.id)}
-              >
-                <div className="dc-list-item-main">
-                  <div className="dc-list-avatar"><Sparkles size={15} /></div>
-                  <div>
-                    <div className="dc-list-title">{i.title}</div>
-                    <div className="dc-list-sub">{i.summary}</div>
-                  </div>
-                </div>
-                <span className="dc-pill dc-pill-blue">{i.confidence}%</span>
-              </button>
-            ))}
+      <div className="xai-shell">
+        <header className="xai-header">
+          <div className="xai-header-copy">
+            <h1>Why the AI said that</h1>
+            <p>Whenever our system makes a health suggestion, this page shows exactly which of your data points pushed it — and how sure the model is.</p>
           </div>
-        </div>
-
-        <div className="dc-card">
-          <div className="dc-confidence" style={{ marginBottom: 18 }}>
-            <span className="dc-confidence-num">{active.confidence}%</span>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 13, color: '#0B2B3C' }}>Model confidence</div>
-              <div style={{ fontSize: 11.5, color: '#5C7680', fontWeight: 600 }}>
-                {active.confidence >= 80 ? 'High — several independent signals agree' : 'Moderate — worth confirming with your clinician'}
+          <div className="xai-header-badge">
+            <ConfidenceRing value={active.confidence} />
+            <div className="xai-header-badge-text">
+              <div className="xai-header-badge-label">Model confidence</div>
+              <div className="xai-header-badge-value">
+                {active.confidence >= 80 ? 'High agreement' : 'Worth confirming'}
               </div>
             </div>
           </div>
+        </header>
 
-          <div className="dc-card-title">What drove this</div>
-          <div className="dc-card-sub">Contribution of each factor, largest first</div>
-          {active.factors.map((f) => (
-            <div className="dc-xai-factor" key={f.label}>
-              <div className="dc-xai-factor-top">
-                <span>{f.label}</span>
-                <span className="dc-xai-weight">{f.direction === 'pos' ? 'lowers risk' : 'raises risk'} · {Math.round(f.weight * 100)}%</span>
-              </div>
-              <div className="dc-xai-bar">
-                <div className={`dc-xai-bar-fill ${f.direction === 'pos' ? 'dc-pos' : 'dc-neg'}`} style={{ width: `${Math.round(f.weight * 100)}%` }} />
-              </div>
-              <div style={{ fontSize: 11, color: '#5C7680', fontWeight: 500 }}>{f.note}</div>
-            </div>
-          ))}
-
-          <div style={{ marginTop: 16, padding: 14, borderRadius: 12, background: '#F2F8F7', border: '1px solid #DCEBE8' }}>
-            <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.3, color: '#0B7A70', marginBottom: 6 }}>
-              <Info size={12} style={{ verticalAlign: -2, marginRight: 5 }} />In plain language
-            </div>
-            <div style={{ fontSize: 12.5, color: '#10262E', fontWeight: 500, lineHeight: 1.6 }}>{active.plain}</div>
-          </div>
-
-          <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 11.5, fontWeight: 700, color: '#5C7680' }}>Was this explanation helpful?</span>
-            <button className="dc-icon-action" aria-label="Helpful" style={{ borderColor: vote[active.id] === 'up' ? '#0E9C8F' : undefined, color: vote[active.id] === 'up' ? '#0B7A70' : undefined }} onClick={() => setVote((v) => ({ ...v, [active.id]: 'up' }))}><ThumbsUp size={14} /></button>
-            <button className="dc-icon-action" aria-label="Not helpful" style={{ borderColor: vote[active.id] === 'down' ? '#E5544A' : undefined, color: vote[active.id] === 'down' ? '#E5544A' : undefined }} onClick={() => setVote((v) => ({ ...v, [active.id]: 'down' }))}><ThumbsDown size={14} /></button>
-          </div>
-        </div>
-      </div>
-
-      <div className="dc-section">
-        <div className="dc-card">
-          <div className="dc-card-title">Ask about this insight</div>
-          <div className="dc-card-sub">Your question goes to your care team along with the explanation above</div>
-          <div className="dc-chat-compose" style={{ padding: 0, border: 'none' }}>
-            <input
-              placeholder="e.g. Why does family history still count if my labs are good?"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && question.trim()) { setAsked((a) => [question.trim(), ...a]); setQuestion(''); }
-              }}
-            />
+        <nav className="xai-picker" aria-label="Choose an insight">
+          {INSIGHTS.map((i) => (
             <button
-              className="dc-chat-send"
-              aria-label="Send question"
-              onClick={() => { if (question.trim()) { setAsked((a) => [question.trim(), ...a]); setQuestion(''); } }}
+              key={i.id}
+              className={`xai-pill${i.id === activeId ? ' active' : ''}`}
+              onClick={() => setActiveId(i.id)}
             >
-              <ArrowRight size={16} />
+              <span className="xai-pill-icon">{i.icon === 'heart' ? <HeartPulse size={14} /> : <Pill size={14} />}</span>
+              <span className="xai-pill-text">
+                <div className="xai-pill-title">{i.title}</div>
+                <div className="xai-pill-sub">{i.confidence}% confidence</div>
+              </span>
             </button>
-          </div>
-          {asked.length > 0 && (
-            <div className="dc-list" style={{ marginTop: 14 }}>
-              {asked.map((q, idx) => (
-                <div className="dc-list-item" key={idx}>
-                  <div className="dc-list-item-main">
-                    <div className="dc-list-avatar">?</div>
-                    <div><div className="dc-list-title">{q}</div><div className="dc-list-sub">Sent to your care team</div></div>
-                  </div>
-                  <span className="dc-pill dc-pill-amber">Pending</span>
-                </div>
-              ))}
+          ))}
+        </nav>
+
+        <div className="xai-main">
+          <section className="xai-graph-card">
+            <div className="xai-card-title"><Brain size={14} />How the AI got here</div>
+            <div className="xai-card-sub">Every factor points into the conclusion it produced — thicker line, stronger pull</div>
+            <div className="xai-graph-stage">
+              <ReasoningGraph title={active.title} confidence={active.confidence} factors={active.factors} />
             </div>
-          )}
-          <div className="dc-chart-legend-note" style={{ marginTop: 14 }}>
-            <ShieldCheck size={12} style={{ verticalAlign: -2, marginRight: 5 }} />
-            AI suggestions never replace medical advice. A clinician reviews every insight before it changes your care plan.
-          </div>
+          </section>
+
+          <section className="xai-panel-card">
+            <div className="xai-tabs">
+              <button className={`xai-tab${tab === 'explain' ? ' active' : ''}`} onClick={() => setTab('explain')}>
+                <Sparkles size={12} style={{ verticalAlign: -2, marginRight: 5 }} />What drove this
+              </button>
+              <button className={`xai-tab${tab === 'ask' ? ' active' : ''}`} onClick={() => setTab('ask')}>
+                <MessageCircleQuestion size={12} style={{ verticalAlign: -2, marginRight: 5 }} />Ask your care team
+              </button>
+            </div>
+
+            {tab === 'explain' ? (
+              <div className="xai-panel-body">
+                {active.factors.map((f) => (
+                  <div className="xai-factor" key={f.label}>
+                    <div className="xai-factor-top">
+                      <span className="xai-factor-label">{f.label}</span>
+                      <span className={`xai-factor-tag ${f.direction}`}>
+                        {f.direction === 'pos' ? 'Lowers risk' : 'Raises risk'} · {Math.round(f.weight * 100)}%
+                      </span>
+                    </div>
+                    <div className="xai-factor-track">
+                      <div className={`xai-factor-fill ${f.direction}`} style={{ width: `${Math.round(f.weight * 100)}%` }} />
+                    </div>
+                    <div className="xai-factor-note">{f.note}</div>
+                  </div>
+                ))}
+
+                <div className="xai-plain">
+                  <div className="xai-plain-label"><Info size={12} />In plain language</div>
+                  <div className="xai-plain-text">{active.plain}</div>
+                </div>
+
+                <div className="xai-feedback">
+                  <span>Was this explanation helpful?</span>
+                  <button
+                    className={`xai-icon-btn up${vote[active.id] === 'up' ? ' active' : ''}`}
+                    aria-label="Helpful"
+                    onClick={() => setVote((v) => ({ ...v, [active.id]: 'up' }))}
+                  >
+                    <ThumbsUp size={13} />
+                  </button>
+                  <button
+                    className={`xai-icon-btn down${vote[active.id] === 'down' ? ' active' : ''}`}
+                    aria-label="Not helpful"
+                    onClick={() => setVote((v) => ({ ...v, [active.id]: 'down' }))}
+                  >
+                    <ThumbsDown size={13} />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="xai-ask-form">
+                  <input
+                    className="xai-ask-input"
+                    placeholder="e.g. Why does family history still count if my labs are good?"
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && submitQuestion()}
+                  />
+                  <button className="xai-ask-send" aria-label="Send question" onClick={submitQuestion}>
+                    <ArrowRight size={16} />
+                  </button>
+                </div>
+                <div className="xai-panel-body">
+                  {asked.length === 0 ? (
+                    <div className="xai-ask-empty">No questions sent yet. Anything you ask here goes straight to your care team, along with this explanation.</div>
+                  ) : (
+                    <div className="xai-ask-list">
+                      {asked.map((q, idx) => (
+                        <div className="xai-ask-item" key={idx}>
+                          <div>
+                            <div className="xai-ask-item-text">{q}</div>
+                            <div className="xai-ask-item-sub">Sent with this insight attached</div>
+                          </div>
+                          <span className="xai-ask-status">Pending</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+
+        <div className="xai-footnote">
+          <ShieldCheck size={13} />
+          <span><strong>AI suggestions never replace medical advice.</strong> A clinician reviews every insight before it changes your care plan.</span>
         </div>
       </div>
     </DashboardLayout>

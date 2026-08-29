@@ -10,6 +10,7 @@ import { DashboardLayout } from '../../components/DashboardLayout';
 import { LineChart } from '../../components/charts/LineChart';
 import { BarChart } from '../../components/charts/BarChart';
 import { useProfile } from '../../lib/useProfile';
+import { displayDoctorName, firstNameOf } from '../../lib/formatName';
 import { PRIORITY_META, PRIORITY_ORDER, type PriorityLevel } from '../../lib/priority';
 import { doctorNav } from './nav';
 import '../../components/dashboard.css';
@@ -47,7 +48,7 @@ const MESSAGES = [
 
 export default function DoctorHome() {
   const { name, loading } = useProfile();
-  const firstName = loading ? '' : name.split(' ')[0];
+  const firstName = loading ? '' : firstNameOf(name);
 
   const sortedQueue = useMemo(
     () => [...QUEUE].sort((a, b) => PRIORITY_ORDER.indexOf(a.priority) - PRIORITY_ORDER.indexOf(b.priority)),
@@ -64,12 +65,12 @@ export default function DoctorHome() {
   const avgWait = Math.round(QUEUE.reduce((s, p) => s + p.waitMinutes, 0) / QUEUE.length);
 
   return (
-    <DashboardLayout roleLabel="Doctor" name={loading ? '…' : `Dr. ${name}`} eyebrow="Clinician Portal" pageTitle="Home" navItems={doctorNav('Home')}>
+    <DashboardLayout roleLabel="Doctor" name={loading ? '…' : displayDoctorName(name)} eyebrow="Clinician Portal" pageTitle="Home" navItems={doctorNav('Home')}>
       <section className="dc-hero">
         <div className="dc-hero-inner">
           <div className="dc-hero-eyebrow"><span className="dc-hero-eyebrow-dot" /> HealthForGood clinician view</div>
           <h1 className="dc-hero-title">
-            {loading ? <span className="dc-skeleton" style={{ width: 300, height: 27, display: 'inline-block' }} /> : `Welcome back, Dr. ${firstName}.`}
+            {loading ? <span className="dc-skeleton" style={{ width: 300, height: 27, display: 'inline-block' }} /> : `Welcome back, Dr. ${firstName || 'there'}.`}
           </h1>
           <p className="dc-hero-sub">Here's today's patient load, sorted by who needs you first — scroll down to see the full queue.</p>
           <div className="dc-hero-chips">
