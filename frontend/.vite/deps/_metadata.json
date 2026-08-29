@@ -1,0 +1,70 @@
+{
+  "hash": "862ca725",
+  "configHash": "b134d97d",
+  "lockfileHash": "3632ee65",
+  "browserHash": "b8802e4a",
+  "optimized": {
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "b1b75d9c",
+      "needsInterop": true
+    },
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "05cb80f0",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "c6a51776",
+      "needsInterop": true
+    },
+    "react-router-dom": {
+      "src": "../../node_modules/react-router-dom/dist/index.mjs",
+      "file": "react-router-dom.js",
+      "fileHash": "a1c9f6c1",
+      "needsInterop": false
+    },
+    "lucide-react": {
+      "src": "../../node_modules/lucide-react/dist/esm/lucide-react.js",
+      "file": "lucide-react.js",
+      "fileHash": "c2feaa7f",
+      "needsInterop": false
+    },
+    "three": {
+      "src": "../../node_modules/three/build/three.module.js",
+      "file": "three.js",
+      "fileHash": "481053b3",
+      "needsInterop": false
+    },
+    "three/examples/jsm/loaders/GLTFLoader.js": {
+      "src": "../../node_modules/three/examples/jsm/loaders/GLTFLoader.js",
+      "file": "three_examples_jsm_loaders_GLTFLoader__js.js",
+      "fileHash": "2635e36e",
+      "needsInterop": false
+    },
+    "@supabase/supabase-js": {
+      "src": "../../node_modules/@supabase/supabase-js/dist/index.mjs",
+      "file": "@supabase_supabase-js.js",
+      "fileHash": "fecb64c9",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-R3P7LEPV": {
+      "file": "chunk-R3P7LEPV.js"
+    },
+    "chunk-P5PVDEGM": {
+      "file": "chunk-P5PVDEGM.js"
+    },
+    "chunk-TSPYLKCY": {
+      "file": "chunk-TSPYLKCY.js"
+    },
+    "chunk-G3PMV62Z": {
+      "file": "chunk-G3PMV62Z.js"
+    }
+  }
+}

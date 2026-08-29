@@ -1,0 +1,26 @@
+{
+  "name": "myhospital-voice-server",
+  "version": "1.0.0",
+  "description": "Multilingual voice assistant backend (Sarvam AI TTS/STT + chat). Kept fully separate from the React frontend.",
+  "type": "commonjs",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "appt": "node appointments-server.js",
+    "appt:dev": "node --watch appointments-server.js",
+    "db:check": "node scripts/check-db.js",
+    "db:seed": "node scripts/seed.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.5",
+    "multer": "^1.4.5-lts.1"
+  }
+}
