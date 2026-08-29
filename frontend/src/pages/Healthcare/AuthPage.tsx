@@ -5,6 +5,7 @@ import { HealthcareScene, type Activity } from './Scene';
 import { AuthForm, type AuthSubmitPayload } from './AuthForm';
 import type { Mode } from './AuthForm';
 import { supabase } from '../../lib/supabaseClient';
+import { WordCycle } from '../../components/WordCycle';
 
 export default function HealthcareAuthPage() {
   const navigate = useNavigate();
@@ -57,6 +58,12 @@ export default function HealthcareAuthPage() {
           .from('users')
           .upsert({ id: user.id, name, email: user.email, role });
         if (profileError) throw profileError;
+
+        // Mirror role/name into auth metadata so the access-token JWT carries
+        // them — the appointments API reads role from `user_metadata.role`.
+        if (user.user_metadata?.role !== role || !user.user_metadata?.name) {
+          await supabase.auth.updateUser({ data: { role, name } });
+        }
 
         localStorage.removeItem('mh_pending_role');
         resolvedRoleRef.current = role;
@@ -178,24 +185,15 @@ export default function HealthcareAuthPage() {
           width: 100%;
           display: flex;
           background:
-            radial-gradient(120% 90% at 15% 0%, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 45%),
-            linear-gradient(90deg, #0F8F84 0%, #0B6E67 100%);
+            radial-gradient(120% 85% at 12% -5%, rgba(128,244,224,0.14) 0%, rgba(128,244,224,0) 46%),
+            radial-gradient(90% 80% at 100% 100%, rgba(6,44,42,0.55) 0%, rgba(6,44,42,0) 60%),
+            linear-gradient(158deg, #0E5C58 0%, #0B4B47 46%, #072E2C 100%);
           font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
           overflow: hidden;
           position: relative;
         }
         .hc-page *, .hc-page *::before, .hc-page *::after { box-sizing: border-box; }
-        .hc-page::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background-image:
-            linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
-          background-size: 44px 44px;
-          mask-image: radial-gradient(140% 100% at 50% 40%, black 35%, transparent 90%);
-          pointer-events: none;
-        }
+        .hc-page::before { display: none; }
         .hc-page::after {
           content: '';
           position: absolute;
@@ -309,9 +307,10 @@ export default function HealthcareAuthPage() {
           font-size: 32px;
           line-height: 1.18;
           margin: 0 0 10px;
-          max-width: 380px;
+          max-width: 420px;
           text-shadow: 0 2px 18px rgba(0,0,0,0.12);
         }
+        .hc-cycle { min-width: 6.4em; text-align: left; color: #8df0dd; }
         .hc-visual-copy p {
           font-size: 14px;
           font-weight: 500;
@@ -712,7 +711,16 @@ export default function HealthcareAuthPage() {
         </div>
 
         <div className="hc-visual-copy">
-          <h1>{mode === 'login' ? 'Care that shows up on time.' : 'Join the HealthForGood network.'}</h1>
+          <h1>
+            {mode === 'login' ? (
+              'Care that shows up on time.'
+            ) : (
+              <>
+                Join the <WordCycle words={['HealthForGood', 'MyHospital']} className="hc-cycle" />{' '}
+                network.
+              </>
+            )}
+          </h1>
           <p>
             {mode === 'login'
               ? 'Sign in as a doctor or patient to connect with your HealthForGood care team.'

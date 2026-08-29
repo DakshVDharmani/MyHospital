@@ -17,18 +17,7 @@
   color: #fff;
   isolation: isolate;
 }
-.dc-hero::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px);
-  background-size: 40px 40px;
-  mask-image: radial-gradient(140% 120% at 20% 30%, black 30%, transparent 85%);
-  pointer-events: none;
-  z-index: 0;
-}
+.dc-hero::before { display: none; }
 .dc-hero-inner { position: relative; z-index: 1; }
 .dc-hero-eyebrow { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; color: rgba(255,255,255,0.82); margin-bottom: 8px; }
 .dc-hero-eyebrow-dot { width: 6px; height: 6px; border-radius: 50%; background: #6EF0C8; box-shadow: 0 0 0 3px rgba(110,240,200,0.28); }

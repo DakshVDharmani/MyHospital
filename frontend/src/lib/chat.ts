@@ -159,6 +159,17 @@ export async function listPatients(): Promise<Array<{ id: string; name: string }
   return data ?? [];
 }
 
+/** Doctors a patient can request an appointment with. */
+export async function listDoctors(): Promise<Array<{ id: string; name: string }>> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, name')
+    .eq('role', 'doctor')
+    .order('name');
+  if (error) throw error;
+  return data ?? [];
+}
+
 /**
  * Returns the existing doctor↔patient thread or creates one. The unique
  * `(doctor_id, patient_id)` index means the upsert is race-safe.

@@ -1,290 +1,455 @@
-import { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { useRouteTransition } from '../../components/RouteTransition';
 import {
-  HeartPulse,
+  Activity,
+  ArrowRight,
+  MessageSquare,
   ShieldCheck,
   Stethoscope,
   Users,
-  MessageSquare,
-  Activity,
-  ArrowRight,
 } from 'lucide-react';
-import { StethoscopeScene } from './StethoscopeScene';
+
+// The WebGL layer (three + GLTFLoader + PMREM) loads after the HTML/UI paints.
+const StethoscopeExperience = lazy(() =>
+  import('./StethoscopeExperience').then((m) => ({ default: m.StethoscopeExperience })),
+);
+import { Loader, NavBar, SceneCaption, ScrollHint, ScrollProgress } from './Overlay';
+import {
+  useIsLowPower,
+  usePointerParallax,
+  useReducedMotion,
+  useScrollProgress,
+} from './hooks';
 
 const FEATURES = [
   {
-    icon: <MessageSquare size={20} />,
+    icon: <MessageSquare size={18} />,
     title: 'Secure messaging',
     body: 'Patients and doctors talk directly — no clinic visit required for a quick question or a follow-up.',
   },
   {
-    icon: <Activity size={20} />,
+    icon: <Activity size={18} />,
     title: 'Care that prioritizes itself',
     body: 'Doctors see who needs them first, automatically — critical cases never wait behind routine ones.',
   },
   {
-    icon: <ShieldCheck size={20} />,
+    icon: <ShieldCheck size={18} />,
     title: 'Built for trust',
     body: 'HIPAA-aware by design, with every record and message kept private between patient and care team.',
   },
 ];
 
 export default function LandingPage() {
-  const navigate = useNavigate();
-  const heroRef = useRef<HTMLDivElement>(null);
-  const progressRef = useRef(0);
+  const { go } = useRouteTransition();
+  const pageRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLElement>(null);
 
-  // Drives the hero model's transform from ordinary page scroll — no pinning,
-  // no scroll-jacking. Progress goes 0 -> 1 continuously as the hero section
-  // travels through the viewport (0 when its top just enters at the bottom,
-  // 1 when its bottom exits at the top), so the page always keeps scrolling
-  // and the model animation is just a parallax layer riding along with it.
-  useEffect(() => {
-    let raf = 0;
-    const update = () => {
-      const el = heroRef.current;
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        const total = rect.height + window.innerHeight;
-        const traveled = window.innerHeight - rect.top;
-        progressRef.current = total > 0 ? Math.max(0, Math.min(1, traveled / total)) : 0;
-      }
-      raf = requestAnimationFrame(update);
-    };
-    raf = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(raf);
+  const { smoothRef, velocityRef, section } = useScrollProgress(scrollRef);
+  const pointerRef = usePointerParallax();
+  const reducedMotion = useReducedMotion();
+  const lowPower = useIsLowPower();
+
+  const [loadProgress, setLoadProgress] = useState(0.08);
+  const [ready, setReady] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  // The page background + vignette follow the timeline. Written straight to the
+  // DOM node (never React state) so scrolling triggers zero re-renders.
+  const handleBackground = useCallback((top: string, bottom: string, vig: number) => {
+    const el = pageRef.current;
+    if (!el) return;
+    el.style.background = `radial-gradient(125% 90% at 50% 12%, ${top} 0%, ${bottom} 68%)`;
+    el.style.setProperty('--vig', vig.toFixed(3));
   }, []);
 
+  useEffect(() => {
+    const onScroll = () => {
+      if (window.scrollY > 40) setScrolled(true);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    // Never let the loader trap the page if the 3D layer stalls or fails.
+    const failSafe = setTimeout(() => setReady(true), 9000);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      clearTimeout(failSafe);
+    };
+  }, []);
+
+  const goSignup = () => go('/signup');
+  const goLogin = () => go('/login');
+
   return (
-    <div className="lp-page">
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');
+    <div className="lp-page" ref={pageRef}>
+      <style>{CSS}</style>
 
-        .lp-page {
-          --teal: #0E9C8F;
-          --teal-deep: #0B7A70;
-          --navy: #0B2B3C;
-          --navy-soft: #4C6B78;
-          --ink: #10262E;
-          --ink-soft: #5C7680;
-          --bg: #F6FAF9;
-          --line: #D6E8E3;
-          --accent: #2C7FF2;
-          --ease: cubic-bezier(.22,.61,.36,1);
+      <Loader progress={loadProgress} done={ready} />
+      <NavBar dim={section === 1 || section === 2} onLogin={goLogin} onSignup={goSignup} />
 
-          background: var(--bg);
-          color: var(--ink);
-          font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
-        }
-        .lp-page *, .lp-page *::before, .lp-page *::after { box-sizing: border-box; }
+      <h1 className="lp-sr-only">
+        MyHospital — care that shows up on time, wherever you are. A HealthForGood initiative
+        connecting patients in underserved communities with licensed doctors and nurses.
+      </h1>
 
-        /* ---------------- Nav ---------------- */
-        .lp-nav {
-          position: sticky; top: 0; z-index: 20;
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 16px 40px;
-          background: rgba(246, 250, 249, 0.82);
-          backdrop-filter: blur(14px);
-          -webkit-backdrop-filter: blur(14px);
-          border-bottom: 1px solid var(--line);
-        }
-        .lp-brand { display: flex; align-items: center; gap: 10px; }
-        .lp-brand-icon {
-          width: 36px; height: 36px; border-radius: 10px;
-          background: linear-gradient(135deg, var(--teal) 0%, var(--teal-deep) 100%);
-          color: #fff; display: flex; align-items: center; justify-content: center;
-          box-shadow: 0 4px 10px rgba(14, 156, 143, 0.3);
-        }
-        .lp-brand-name { font-family: 'Fraunces', 'Manrope', serif; font-weight: 600; font-size: 17px; color: var(--navy); }
-        .lp-nav-actions { display: flex; align-items: center; gap: 10px; }
-        .lp-btn {
-          font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 13px;
-          padding: 9px 18px; border-radius: 10px; cursor: pointer; border: none;
-          transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease), background 0.18s var(--ease), border-color 0.18s var(--ease);
-        }
-        .lp-btn-ghost { background: transparent; color: var(--navy); border: 1.5px solid var(--line); }
-        .lp-btn-ghost:hover { border-color: var(--teal); color: var(--teal-deep); }
-        .lp-btn-solid {
-          background: linear-gradient(135deg, var(--teal) 0%, var(--teal-deep) 100%); color: #fff;
-          box-shadow: 0 10px 22px rgba(14, 156, 143, 0.28);
-          display: inline-flex; align-items: center; gap: 7px;
-        }
-        .lp-btn-solid:hover { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(14, 156, 143, 0.36); }
-
-        /* ---------------- Hero (no pin — normal document flow, model is a
-           blurred backdrop layer whose transform tracks scroll progress) --- */
-        .lp-hero {
-          position: relative;
-          min-height: 100vh;
-          display: flex; align-items: center;
-          overflow: hidden;
-        }
-        .lp-hero::before {
-          content: '';
-          position: absolute; inset: 0;
-          background-image:
-            linear-gradient(rgba(14,156,143,0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(14,156,143,0.05) 1px, transparent 1px);
-          background-size: 42px 42px;
-          mask-image: radial-gradient(80% 70% at 15% 45%, black 30%, transparent 85%);
-          pointer-events: none;
-        }
-        .lp-hero-model {
-          position: absolute; inset: 0; z-index: 1;
-          filter: blur(3px);
-          opacity: 0.5;
-        }
-        .lp-hero-text {
-          position: relative; z-index: 2;
-          max-width: 480px;
-          padding: 0 6vw;
-        }
-        .lp-hero-eyebrow {
-          display: inline-flex; align-items: center; gap: 7px;
-          font-size: 11px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase;
-          color: var(--teal-deep);
-          background: rgba(14,156,143,0.1); border: 1px solid rgba(14,156,143,0.22);
-          padding: 6px 12px; border-radius: 999px;
-          margin-bottom: 18px;
-        }
-        .lp-hero-eyebrow-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); }
-        .lp-hero-title {
-          font-family: 'Fraunces', 'Manrope', serif; font-weight: 600; font-size: 40px; line-height: 1.15;
-          color: var(--navy); margin: 0 0 18px;
-        }
-        .lp-hero-body {
-          font-size: 15px; line-height: 1.7; color: var(--ink-soft); font-weight: 500;
-          margin: 0 0 28px;
-        }
-        .lp-hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; }
-
-        @media (max-width: 860px) {
-          .lp-hero-title { font-size: 30px; }
-          .lp-hero-text { max-width: 92vw; }
-        }
-
-        /* ---------------- Sections below the fold ---------------- */
-        .lp-section { padding: 90px 8vw; }
-        .lp-section-head { max-width: 620px; margin: 0 auto 48px; text-align: center; }
-        .lp-section-eyebrow {
-          font-size: 11px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase;
-          color: var(--teal-deep); margin-bottom: 10px;
-        }
-        .lp-section-title { font-family: 'Fraunces', 'Manrope', serif; font-weight: 600; font-size: 28px; color: var(--navy); margin: 0 0 10px; }
-        .lp-section-sub { font-size: 14px; color: var(--ink-soft); font-weight: 500; line-height: 1.6; }
-
-        .lp-feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; max-width: 1080px; margin: 0 auto; }
-        @media (max-width: 860px) { .lp-feature-grid { grid-template-columns: 1fr; } }
-        .lp-feature-card {
-          background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 26px;
-          transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
-        }
-        .lp-feature-card:hover { transform: translateY(-4px); box-shadow: 0 18px 36px rgba(6, 34, 32, 0.08); }
-        .lp-feature-icon {
-          width: 42px; height: 42px; border-radius: 12px; margin-bottom: 16px;
-          background: linear-gradient(135deg, var(--teal) 0%, var(--teal-deep) 100%); color: #fff;
-          display: flex; align-items: center; justify-content: center;
-          box-shadow: 0 8px 16px rgba(14, 156, 143, 0.24);
-        }
-        .lp-feature-title { font-family: 'Fraunces', 'Manrope', serif; font-weight: 600; font-size: 16px; color: var(--navy); margin: 0 0 8px; }
-        .lp-feature-body { font-size: 13px; color: var(--ink-soft); font-weight: 500; line-height: 1.6; margin: 0; }
-
-        .lp-cta-band {
-          margin: 0 8vw 90px;
-          border-radius: 24px;
-          padding: 56px 8vw;
-          background: linear-gradient(120deg, #0F8F84 0%, #0B6E67 100%);
-          color: #fff;
-          text-align: center;
-          position: relative;
-          overflow: hidden;
-        }
-        .lp-cta-band::before {
-          content: '';
-          position: absolute; inset: 0;
-          background: radial-gradient(120% 140% at 85% 0%, rgba(110, 240, 200, 0.28) 0%, rgba(110, 240, 200, 0) 55%);
-          pointer-events: none;
-        }
-        .lp-cta-band > * { position: relative; z-index: 1; }
-        .lp-cta-title { font-family: 'Fraunces', 'Manrope', serif; font-weight: 600; font-size: 26px; margin: 0 0 12px; }
-        .lp-cta-sub { font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.86); margin: 0 0 26px; }
-
-        .lp-footer {
-          padding: 28px 8vw; border-top: 1px solid var(--line);
-          display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-          font-size: 12px; color: var(--ink-soft); font-weight: 600;
-        }
-      `}</style>
-
-      <nav className="lp-nav">
-        <div className="lp-brand">
-          <div className="lp-brand-icon"><HeartPulse size={18} strokeWidth={2.3} /></div>
-          <span className="lp-brand-name">MyHospital</span>
-        </div>
-        <div className="lp-nav-actions">
-          <button className="lp-btn lp-btn-ghost" onClick={() => navigate('/login')}>Log in</button>
-          <button className="lp-btn lp-btn-solid" onClick={() => navigate('/signup')}>
-            Sign up <ArrowRight size={14} />
-          </button>
-        </div>
-      </nav>
-
-      <section className="lp-hero" ref={heroRef}>
-        <div className="lp-hero-model">
-          <StethoscopeScene progressRef={progressRef} />
-        </div>
-
-        <div className="lp-hero-text">
-          <span className="lp-hero-eyebrow"><span className="lp-hero-eyebrow-dot" /> HealthForGood NGO</span>
-          <h1 className="lp-hero-title">Care that shows up on time — wherever you are.</h1>
-          <p className="lp-hero-body">
-            HealthForGood exists because quality care shouldn't depend on your zip code. We connect patients in
-            underserved communities with licensed doctors and nurses — real consultations, real records, real
-            follow-up care — all from a phone. No waiting rooms, no travel, no gatekeeping.
-          </p>
-          <div className="lp-hero-ctas">
-            <button className="lp-btn lp-btn-solid" onClick={() => navigate('/signup')}>
-              Get started <ArrowRight size={14} />
-            </button>
-            <button className="lp-btn lp-btn-ghost" onClick={() => navigate('/login')}>I already have an account</button>
+      {/* ---------- The cinematic, scroll-driven act ---------- */}
+      <section className="lp-scroll" ref={scrollRef} aria-label="Introduction">
+        <div className="lp-sticky">
+          <Suspense fallback={null}>
+            <StethoscopeExperience
+              progressRef={smoothRef}
+              velocityRef={velocityRef}
+              pointerRef={pointerRef}
+              reducedMotion={reducedMotion}
+              lowPower={lowPower}
+              onBackground={handleBackground}
+              onLoadProgress={setLoadProgress}
+              onReady={() => {
+                setLoadProgress(1);
+                setReady(true);
+              }}
+            />
+          </Suspense>
+          <div className="lp-overlay">
+            <SceneCaption section={section} reduced={reducedMotion} />
+            <ScrollProgress section={section} progressRef={smoothRef} />
+            <ScrollHint hidden={scrolled} />
           </div>
+          <div className="lp-vignette" aria-hidden="true" />
         </div>
       </section>
 
-      <section className="lp-section">
-        <div className="lp-section-head">
-          <div className="lp-section-eyebrow">Why MyHospital</div>
-          <h2 className="lp-section-title">One place for patients and doctors to actually connect</h2>
-          <p className="lp-section-sub">Built with HealthForGood's frontline teams, for the clinics and communities that need it most.</p>
-        </div>
-        <div className="lp-feature-grid">
-          {FEATURES.map((f) => (
-            <div className="lp-feature-card" key={f.title}>
-              <div className="lp-feature-icon">{f.icon}</div>
-              <h3 className="lp-feature-title">{f.title}</h3>
-              <p className="lp-feature-body">{f.body}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* ---------- Grounded content ---------- */}
+      <main className="lp-grounded">
+        <section className="lp-block" id="product">
+          <p className="lp-eyebrow">The platform</p>
+          <h2 className="lp-h2">One place for patients and doctors to actually connect.</h2>
+          <p className="lp-lead">
+            Built with HealthForGood&rsquo;s frontline teams, for the clinics and communities that
+            need it most.
+          </p>
+          <div className="lp-grid">
+            {FEATURES.map((f) => (
+              <article className="lp-card" key={f.title}>
+                <span className="lp-card-icon">{f.icon}</span>
+                <h3>{f.title}</h3>
+                <p>{f.body}</p>
+              </article>
+            ))}
+          </div>
+        </section>
 
-      <div className="lp-cta-band">
-        <h2 className="lp-cta-title">Join the HealthForGood network today.</h2>
-        <p className="lp-cta-sub">Whether you're a patient looking for care or a doctor looking to give it — it takes a minute to sign up.</p>
-        <div className="lp-hero-ctas" style={{ justifyContent: 'center' }}>
-          <button className="lp-btn lp-btn-solid" style={{ background: '#fff', color: 'var(--teal-deep)', boxShadow: '0 10px 22px rgba(0,0,0,0.16)' }} onClick={() => navigate('/signup')}>
-            <Stethoscope size={14} /> Sign up as a doctor <ArrowRight size={14} />
-          </button>
-          <button className="lp-btn lp-btn-solid" onClick={() => navigate('/signup')}>
-            <Users size={14} /> Sign up as a patient <ArrowRight size={14} />
-          </button>
-        </div>
-      </div>
+        <section className="lp-block lp-block--tight" id="impact">
+          <div className="lp-impact">
+            {[
+              ['Always open', 'Care that does not keep clinic hours.'],
+              ['First reply in minutes', 'Not days on a waiting list.'],
+              ['Zero travel', 'A full consultation from a phone.'],
+            ].map(([k, v]) => (
+              <div className="lp-impact-item" key={k}>
+                <strong>{k}</strong>
+                <span>{v}</span>
+              </div>
+            ))}
+          </div>
+        </section>
 
-      <footer className="lp-footer">
-        <span>© {new Date().getFullYear()} MyHospital · A HealthForGood NGO initiative</span>
-        <span>HIPAA-aware · Built for clinics &amp; outreach teams</span>
-      </footer>
+        <section className="lp-cta" id="join">
+          <h2>Join the HealthForGood network today.</h2>
+          <p>
+            Whether you&rsquo;re a patient looking for care or a doctor looking to give it — it takes
+            a minute to sign up.
+          </p>
+          <div className="lp-cta-row">
+            <button className="lp-btn lp-btn--light" onClick={goSignup}>
+              <Stethoscope size={14} /> Sign up as a doctor <ArrowRight size={14} />
+            </button>
+            <button className="lp-btn lp-btn--solid" onClick={goSignup}>
+              <Users size={14} /> Sign up as a patient <ArrowRight size={14} />
+            </button>
+          </div>
+        </section>
+
+        <footer className="lp-footer">
+          <span>© {new Date().getFullYear()} MyHospital · A HealthForGood NGO initiative</span>
+          <span>HIPAA-aware · Built for clinics &amp; outreach teams</span>
+        </footer>
+      </main>
     </div>
   );
 }
+
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap');
+
+.lp-page {
+  --teal: #4fd8c4;
+  --teal-deep: #0e9c8f;
+  --ink: #eef7f5;
+  --ink-soft: #9db8b3;
+  --vig: 0.5;
+  min-height: 100vh;
+  background: radial-gradient(125% 90% at 50% 12%, #0e504c 0%, #072e2c 68%);
+  color: var(--ink);
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow-x: clip;
+}
+.lp-page *, .lp-page *::before, .lp-page *::after { box-sizing: border-box; }
+.lp-sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ---------------- Loader ---------------- */
+.lp-loader {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; background: #050f14;
+  transition: opacity .8s ease, visibility .8s ease;
+}
+.lp-loader.is-done { opacity: 0; visibility: hidden; pointer-events: none; }
+.lp-loader-mark {
+  width: 40px; height: 40px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #4fd8c4, #0e9c8f); color: #04201d;
+  box-shadow: 0 10px 30px rgba(79, 216, 196, .28);
+}
+.lp-loader-word { font-family: 'Fraunces', serif; font-size: 20px; letter-spacing: .01em; color: #f2fbf9; }
+.lp-loader-sub {
+  font-size: 10px; letter-spacing: .34em; text-transform: uppercase; color: #6f9a95;
+}
+.lp-loader-bar {
+  margin-top: 8px; width: 168px; height: 2px; border-radius: 2px;
+  background: rgba(255, 255, 255, .1); overflow: hidden;
+}
+.lp-loader-bar span {
+  display: block; height: 100%; transform-origin: left; transform: scaleX(.04);
+  background: linear-gradient(90deg, #4fd8c4, #3fb6ff); transition: transform .3s ease;
+}
+
+/* ---------------- Nav ---------------- */
+.lp-nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 22px clamp(20px, 4vw, 44px);
+  transition: opacity .6s ease;
+}
+.lp-nav.is-dim { opacity: .32; }
+.lp-brand {
+  display: flex; align-items: center; gap: 9px;
+  font-family: 'Fraunces', serif; font-size: 16px; color: #f2fbf9;
+}
+.lp-brand-mark {
+  width: 28px; height: 28px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #4fd8c4, #0e9c8f); color: #04201d;
+}
+.lp-nav-links { display: flex; align-items: center; gap: 22px; }
+.lp-nav-links a {
+  font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ink-soft); text-decoration: none; transition: color .2s ease;
+}
+.lp-nav-links a:hover { color: var(--ink); }
+.lp-nav-ghost {
+  background: none; border: 0; cursor: pointer; color: var(--ink-soft);
+  font: inherit; font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+  transition: color .2s ease;
+}
+.lp-nav-ghost:hover { color: var(--ink); }
+.lp-nav-cta {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  padding: 9px 15px; border-radius: 999px; border: 1px solid rgba(79, 216, 196, .4);
+  background: rgba(79, 216, 196, .12); color: #bff3ea;
+  transition: transform .2s ease, background .2s ease, border-color .2s ease;
+}
+.lp-nav-cta:hover { transform: translateY(-1px); background: rgba(79, 216, 196, .2); border-color: rgba(79, 216, 196, .7); }
+.lp-nav-cta svg { transition: transform .2s ease; }
+.lp-nav-cta:hover svg { transform: translateX(2px); }
+
+/* ---------------- Cinematic act ---------------- */
+.lp-scroll { position: relative; height: 560vh; }
+.lp-sticky { position: sticky; top: 0; height: 100vh; overflow: hidden; }
+.lp-canvas { position: absolute; inset: 0; z-index: 1; }
+.lp-canvas canvas { display: block; width: 100% !important; height: 100% !important; }
+
+.lp-overlay { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.lp-vignette {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  box-shadow: inset 0 0 clamp(120px, 24vw, 380px) rgba(0, 0, 0, calc(var(--vig) * 0.92));
+  background: radial-gradient(120% 120% at 50% 45%, transparent 45%, rgba(0, 0, 0, calc(var(--vig) * 0.5)) 100%);
+}
+
+/* caption */
+.lp-caption {
+  position: absolute; left: clamp(22px, 6vw, 92px); top: 50%; transform: translateY(-50%);
+  max-width: min(640px, 74vw);
+}
+.lp-caption-tag {
+  display: block; margin-bottom: 18px; white-space: nowrap;
+  font-size: 14px; letter-spacing: .2em; color: #7fdccb;
+  opacity: 0; animation: lp-fade .6s ease .05s forwards;
+}
+.lp-caption-type { text-transform: none; }
+.lp-caption-lines {
+  margin: 0; display: flex; flex-direction: column;
+  font-family: 'Fraunces', serif; font-weight: 500;
+  font-size: clamp(32px, 6.6vw, 78px); line-height: 1.05; letter-spacing: -.012em;
+  color: #f4fcfa;
+}
+.lp-caption-lines span {
+  display: block; opacity: 0; transform: translateY(20px);
+  animation: lp-rise .85s cubic-bezier(.22, .61, .36, 1) forwards;
+}
+@keyframes lp-fade { to { opacity: 1; } }
+@keyframes lp-rise { to { opacity: 1; transform: none; } }
+
+/* progress indicator */
+.lp-progress {
+  position: absolute; right: clamp(18px, 4vw, 54px); top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; align-items: flex-end; gap: 20px;
+}
+.lp-type-caret {
+  display: inline-block; width: 2px; height: .95em; margin-left: 3px;
+  vertical-align: -0.12em; background: #4fd8c4;
+  animation: lp-caret 1s steps(1, end) infinite;
+}
+@keyframes lp-caret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+.lp-progress-count { display: flex; align-items: baseline; gap: 6px; }
+.lp-progress-num {
+  font-family: 'Fraunces', serif; font-size: 30px; color: #f4fcfa;
+  animation: lp-fade .5s ease;
+}
+.lp-progress-total { font-size: 11px; letter-spacing: .12em; color: #6f9a95; }
+.lp-progress-rail { position: relative; display: flex; flex-direction: column; gap: 13px; }
+.lp-progress-fill {
+  position: absolute; right: -11px; top: 2px; bottom: 2px; width: 2px; border-radius: 2px;
+  transform-origin: top; transform: scaleY(0);
+  background: linear-gradient(#4fd8c4, #3fb6ff);
+}
+.lp-progress-tick {
+  display: flex; align-items: center; justify-content: flex-end; gap: 9px;
+  font-size: 9.5px; letter-spacing: .2em; text-transform: uppercase; color: #557d78;
+  transition: color .4s ease;
+}
+.lp-progress-tick i {
+  display: block; width: 16px; height: 1px; background: currentColor;
+  transition: width .4s ease, background .4s ease;
+}
+.lp-progress-tick.is-on { color: #8ee6d5; }
+.lp-progress-tick.is-on i { width: 30px; }
+
+/* scroll hint */
+.lp-hint {
+  position: absolute; left: 50%; bottom: 32px; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  font-size: 9.5px; letter-spacing: .34em; text-transform: uppercase; color: #86a8a3;
+  transition: opacity .6s ease;
+}
+.lp-hint.is-hidden { opacity: 0; }
+.lp-hint i {
+  width: 1px; height: 34px;
+  background: linear-gradient(#86a8a3, transparent);
+  animation: lp-hint 1.9s ease-in-out infinite;
+}
+@keyframes lp-hint {
+  0%, 100% { transform: scaleY(.3); opacity: .4; transform-origin: top; }
+  50% { transform: scaleY(1); opacity: 1; transform-origin: top; }
+}
+
+/* ---------------- Grounded content ---------------- */
+.lp-grounded {
+  position: relative; z-index: 5;
+  background: linear-gradient(#0c3a31 0%, #08302a 100%);
+  border-top: 1px solid rgba(255, 255, 255, .08);
+}
+.lp-block { max-width: 1080px; margin: 0 auto; padding: clamp(80px, 12vw, 150px) clamp(22px, 6vw, 40px); }
+.lp-block--tight { padding-top: 0; }
+.lp-eyebrow { font-size: 11px; letter-spacing: .28em; text-transform: uppercase; color: #7fdccb; margin: 0 0 16px; }
+.lp-h2 {
+  font-family: 'Fraunces', serif; font-weight: 500; font-size: clamp(26px, 4vw, 44px);
+  line-height: 1.12; letter-spacing: -.01em; color: #f4fcfa; margin: 0 0 16px; max-width: 18ch;
+}
+.lp-lead { font-size: 15px; line-height: 1.7; color: var(--ink-soft); max-width: 52ch; margin: 0 0 48px; }
+.lp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.lp-card {
+  padding: 26px; border-radius: 18px;
+  background: rgba(255, 255, 255, .03); border: 1px solid rgba(255, 255, 255, .08);
+  transition: transform .25s ease, border-color .25s ease, background .25s ease;
+}
+.lp-card:hover { transform: translateY(-4px); border-color: rgba(79, 216, 196, .35); background: rgba(255, 255, 255, .05); }
+.lp-card-icon {
+  width: 38px; height: 38px; border-radius: 11px; margin-bottom: 16px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #4fd8c4, #0e9c8f); color: #04201d;
+}
+.lp-card h3 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 17px; color: #f2fbf9; margin: 0 0 8px; }
+.lp-card p { font-size: 13px; line-height: 1.65; color: var(--ink-soft); margin: 0; }
+
+.lp-impact {
+  max-width: 1080px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 18px; border-top: 1px solid rgba(255, 255, 255, .08); padding-top: 44px;
+}
+.lp-impact-item { display: flex; flex-direction: column; gap: 8px; }
+.lp-impact-item strong {
+  font-family: 'Fraunces', serif; font-weight: 500; font-size: 20px; color: #f4fcfa;
+}
+.lp-impact-item span { font-size: 13px; color: var(--ink-soft); }
+
+.lp-cta {
+  max-width: 900px; margin: 0 auto clamp(80px, 12vw, 150px); text-align: center;
+  padding: clamp(40px, 7vw, 72px) clamp(22px, 6vw, 40px);
+  border-radius: 26px;
+  background: linear-gradient(135deg, rgba(79, 216, 196, .14), rgba(63, 182, 255, .08));
+  border: 1px solid rgba(79, 216, 196, .22);
+}
+.lp-cta h2 {
+  font-family: 'Fraunces', serif; font-weight: 500; font-size: clamp(24px, 3.6vw, 38px);
+  color: #f4fcfa; margin: 0 0 12px;
+}
+.lp-cta p { font-size: 14px; line-height: 1.65; color: var(--ink-soft); margin: 0 auto 28px; max-width: 46ch; }
+.lp-cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.lp-btn {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  font: inherit; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  padding: 13px 22px; border-radius: 999px; border: 1px solid transparent;
+  transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
+}
+.lp-btn svg:last-child { transition: transform .2s ease; }
+.lp-btn:hover svg:last-child { transform: translateX(3px); }
+.lp-btn--solid { background: linear-gradient(135deg, #4fd8c4, #0e9c8f); color: #04201d; box-shadow: 0 14px 30px rgba(79, 216, 196, .28); }
+.lp-btn--solid:hover { transform: translateY(-2px); box-shadow: 0 18px 38px rgba(79, 216, 196, .4); }
+.lp-btn--light { background: #f4fcfa; color: #0b2b28; }
+.lp-btn--light:hover { transform: translateY(-2px); box-shadow: 0 16px 32px rgba(0, 0, 0, .3); }
+
+.lp-footer {
+  max-width: 1080px; margin: 0 auto; padding: 26px clamp(22px, 6vw, 40px);
+  border-top: 1px solid rgba(255, 255, 255, .06);
+  display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  font-size: 11px; letter-spacing: .04em; color: #6f8f8a;
+}
+
+/* ---------------- Responsive ---------------- */
+@media (max-width: 820px) {
+  .lp-scroll { height: 520vh; }
+  .lp-nav-links a { display: none; }
+  .lp-caption { top: auto; bottom: 128px; transform: none; }
+  .lp-progress { top: 74px; bottom: auto; transform: none; }
+  .lp-caption-tag { font-size: 12px; letter-spacing: .16em; }
+  .lp-progress-tick em { display: none; }
+  .lp-progress-tick i { width: 12px; }
+  .lp-progress-tick.is-on i { width: 20px; }
+  .lp-grid, .lp-impact { grid-template-columns: 1fr; }
+}
+
+/* ---------------- Reduced motion ---------------- */
+@media (prefers-reduced-motion: reduce) {
+  .lp-page *,
+  .lp-page *::before,
+  .lp-page *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+  .lp-caption-tag, .lp-caption-lines span { opacity: 1 !important; transform: none !important; }
+  .lp-hint i { animation: none; }
+}
+`;

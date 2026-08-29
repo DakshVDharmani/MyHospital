@@ -69,6 +69,18 @@ class RiskResult(BaseModel):
     priority_label: str
 
 
+class Factor(BaseModel):
+    label: str
+    weight: float
+    direction: str
+    note: str
+
+
+class ExplainResult(RiskResult):
+    base_rate: float
+    factors: list[Factor]
+
+
 class PrioritizedResult(RiskResult):
     rank: int
 
@@ -110,6 +122,19 @@ def predict(patient: Patient):
     except ValueError as e:
         raise HTTPException(422, str(e))
     return RiskResult(patient_id=patient.patient_id, **result)
+
+
+@app.post("/explain", response_model=ExplainResult)
+def explain(patient: Patient):
+    """Same as /predict, plus which specific fields pushed this patient's
+    score up or down — real per-prediction SHAP contributions from the
+    trained model, for driving the XAI reasoning graph on the frontend."""
+    model = _require_model()
+    try:
+        result = model.explain_records([_as_record(patient)])[0]
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return ExplainResult(patient_id=patient.patient_id, **result)
 
 
 @app.post("/prioritize", response_model=list[PrioritizedResult])
