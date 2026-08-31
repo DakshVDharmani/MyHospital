@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Video,
@@ -16,10 +17,13 @@ import { useProfile } from '../../lib/useProfile';
 import { listDoctors } from '../../lib/chat';
 import {
   useAppointments,
+  useAppointmentsRealtime,
   useRequestAppointment,
   useCancelAppointment,
+  APPT_TYPE_LABEL,
   type Appointment,
   type ApptMode,
+  type ApptType,
 } from '../../lib/appointments';
 import { patientNav } from './nav';
 import '../../components/dashboard.css';
@@ -31,6 +35,7 @@ const STATUS_PILL: Record<Appointment['status'], string> = {
   completed: 'ax-pill-blue',
   declined: 'ax-pill-red',
   cancelled: 'ax-pill-grey',
+  no_show: 'ax-pill-red',
 };
 
 const hhmm = (d: Date) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -43,7 +48,9 @@ function whenLabel(a: { start: string }) {
 
 export default function PatientAppointments() {
   const { id, name, loading } = useProfile();
+  const navigate = useNavigate();
   const appts = useAppointments();
+  useAppointmentsRealtime();
   const requestMut = useRequestAppointment();
   const cancelMut = useCancelAppointment();
   const doctors = useQuery({ queryKey: ['doctors'], queryFn: listDoctors, staleTime: 5 * 60_000 });
@@ -52,6 +59,7 @@ export default function PatientAppointments() {
     doctorId: '',
     title: '',
     reason: '',
+    type: 'general_consultation' as ApptType,
     mode: 'in_person' as ApptMode,
     date: '',
     time: '',
@@ -75,22 +83,30 @@ export default function PatientAppointments() {
 
   const submit = () => {
     if (!form.doctorId || !form.title.trim()) return;
-    const doctorName = doctors.data?.find((d) => d.id === form.doctorId)?.name ?? '';
     const start =
       form.date && form.time ? new Date(`${form.date}T${form.time}`).toISOString() : undefined;
     requestMut.mutate(
       {
         doctorId: form.doctorId,
-        doctorName,
         title: form.title.trim(),
         reason: form.reason.trim(),
+        appointmentType: form.type,
         mode: form.mode,
         start,
         preferredWindow: form.window.trim() || (start ? '' : 'Flexible'),
       },
       {
         onSuccess: () =>
-          setForm({ doctorId: '', title: '', reason: '', mode: 'in_person', date: '', time: '', window: '' }),
+          setForm({
+            doctorId: '',
+            title: '',
+            reason: '',
+            type: 'general_consultation',
+            mode: 'in_person',
+            date: '',
+            time: '',
+            window: '',
+          }),
       },
     );
   };
@@ -161,6 +177,21 @@ export default function PatientAppointments() {
                 <option value="">Select a doctor…</option>
                 {(doctors.data ?? []).map((d) => (
                   <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="ax-field">
+              <span className="ax-label">Appointment type</span>
+              <select
+                className="ax-select"
+                value={form.type}
+                onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as ApptType }))}
+              >
+                {(Object.keys(APPT_TYPE_LABEL) as ApptType[]).map((t) => (
+                  <option key={t} value={t}>
+                    {APPT_TYPE_LABEL[t]}
+                  </option>
                 ))}
               </select>
             </label>
@@ -278,6 +309,14 @@ export default function PatientAppointments() {
                     {a.mode === 'video' ? <Video size={11} /> : <MapPin size={11} />} {a.mode === 'video' ? 'Video' : 'In-person'}
                   </span>
                 </div>
+                {a.status === 'confirmed' && a.mode === 'video' && (
+                  <button
+                    className="ax-btn ax-btn-primary ax-btn-block"
+                    onClick={() => navigate(`/patient/call/${a.id}`)}
+                  >
+                    <Video size={13} /> Join video call
+                  </button>
+                )}
                 {a.status === 'requested' && (
                   <button
                     className="ax-btn ax-btn-danger ax-btn-block"

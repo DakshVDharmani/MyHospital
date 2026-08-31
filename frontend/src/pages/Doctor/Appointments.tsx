@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Video,
@@ -20,6 +21,7 @@ import { useProfile } from '../../lib/useProfile';
 import { listPatients } from '../../lib/chat';
 import {
   useAppointments,
+  useAppointmentsRealtime,
   useCreateAppointment,
   useUpdateAppointment,
   type Appointment,
@@ -45,7 +47,9 @@ function whenLabel(a: { start: string; end: string }) {
 
 export default function DoctorAppointments() {
   const { id, name, loading } = useProfile();
+  const navigate = useNavigate();
   const appts = useAppointments();
+  useAppointmentsRealtime();
   const createMut = useCreateAppointment();
   const updateMut = useUpdateAppointment();
   const patients = useQuery({ queryKey: ['patients'], queryFn: listPatients, staleTime: 5 * 60_000 });
@@ -88,11 +92,9 @@ export default function DoctorAppointments() {
     if (!form.patientId || !form.title.trim() || !slot) return;
     const start = new Date(slot.start);
     const end = new Date(start.getTime() + form.minutes * 60000);
-    const patientName = patients.data?.find((p) => p.id === form.patientId)?.name ?? '';
     createMut.mutate(
       {
         patientId: form.patientId,
-        patientName,
         title: form.title.trim(),
         reason: form.reason.trim(),
         mode: form.mode,
@@ -173,6 +175,41 @@ export default function DoctorAppointments() {
         />
 
         <div className="ax-rail">
+          {/* ---------- Video visits ---------- */}
+          {rows.some((a) => a.status === 'confirmed' && a.mode === 'video') && (
+            <div className="ax-panel">
+              <div className="ax-panel-top">
+                <span className="ax-panel-ic"><Video size={16} /></span>
+                <div>
+                  <h3 className="ax-panel-head">Video visits</h3>
+                  <p className="ax-panel-sub">Open the room — the patient joins the same link</p>
+                </div>
+              </div>
+              {rows
+                .filter((a) => a.status === 'confirmed' && a.mode === 'video')
+                .sort((a, b) => +new Date(a.start) - +new Date(b.start))
+                .map((a) => (
+                  <div className="ax-reqcard is-confirmed" key={a.id}>
+                    <div className="ax-reqcard-top">
+                      <span className="ax-avatar">
+                        {a.patientName.split(/\s+/).map((x) => x[0]).slice(0, 2).join('')}
+                      </span>
+                      <div style={{ minWidth: 0 }}>
+                        <div className="ax-reqcard-name">{a.patientName}</div>
+                        <div className="ax-reqcard-meta">{a.title}</div>
+                      </div>
+                    </div>
+                    <button
+                      className="ax-btn ax-btn-primary ax-btn-block"
+                      onClick={() => navigate(`/doctor/call/${a.id}`)}
+                    >
+                      <Video size={13} /> Join video call
+                    </button>
+                  </div>
+                ))}
+            </div>
+          )}
+
           {/* ---------- New appointment ---------- */}
           {slot && (
             <div className="ax-panel ax-composer">
@@ -283,6 +320,15 @@ export default function DoctorAppointments() {
                 }`}><span className="ax-dot" />{selected.status}</span>
                 <span className="ax-pill ax-pill-grey">{selected.mode === 'video' ? 'Video' : 'In-person'}</span>
               </div>
+
+              {selected.status === 'confirmed' && selected.mode === 'video' && (
+                <button
+                  className="ax-btn ax-btn-primary ax-btn-block"
+                  onClick={() => navigate(`/doctor/call/${selected.id}`)}
+                >
+                  <Video size={13} /> Join video call
+                </button>
+              )}
 
               <div className="ax-field">
                 <span className="ax-label">Mode</span>

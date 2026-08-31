@@ -13,6 +13,7 @@ import DoctorSecureChat from "./pages/Doctor/SecureChat";
 import DoctorManagingPatients from "./pages/Doctor/ManagingPatients";
 import DoctorConsultation from "./pages/Doctor/Consultation";
 import DoctorAppointments from "./pages/Doctor/Appointments";
+import VideoCall from "./pages/shared/VideoCall";
 import { VoiceWidget } from "./voice-widget/VoiceWidget";
 import { RouteTransition } from "./components/RouteTransition";
 
@@ -31,6 +32,7 @@ function App() {
         <Route path="/patient/consultation" element={<PatientConsultation />} />
         <Route path="/patient/appointments" element={<PatientAppointments />} />
         <Route path="/patient/vitals" element={<PatientVitals />} />
+        <Route path="/patient/call/:appointmentId" element={<VideoCall />} />
         <Route path="/patient/records" element={<PatientMedicalRecords />} />
         <Route path="/patient/xai" element={<PatientXaiHelp />} />
 
@@ -39,6 +41,7 @@ function App() {
         <Route path="/doctor/patients" element={<DoctorManagingPatients />} />
         <Route path="/doctor/consultation" element={<DoctorConsultation />} />
         <Route path="/doctor/appointments" element={<DoctorAppointments />} />
+        <Route path="/doctor/call/:appointmentId" element={<VideoCall />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

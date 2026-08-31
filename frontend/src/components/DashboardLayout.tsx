@@ -17,6 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { displayDoctorName } from '../lib/formatName';
 import { ProfileMenu } from './ProfileMenu';
+import { NotificationBell } from './NotificationBell';
 
 interface DoctorResult {
   id: string;
@@ -667,7 +668,7 @@ export function DashboardLayout({ roleLabel, name, eyebrow, pageTitle, navItems,
           <DoctorSearch onSelect={handleDoctorSelect} />
 
           <div className="dash-topbar-right">
-            <AlertsBell alerts={alerts && alerts.length ? alerts : DEFAULT_ALERTS} />
+            <NotificationBell />
             <ProfileMenu />
             <button className="dash-logout" onClick={handleLogout}>
               <LogOut size={13} /> Log out
