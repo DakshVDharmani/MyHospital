@@ -6,3 +6,9 @@ scikit-learn==1.7.2
 xgboost==3.2.0
 pandas==2.3.3
 numpy==2.2.6
+
+# Zero-shot specialty router (pre-trained DistilBERT-MNLI, not an LLM).
+# Install the CPU-only torch wheel to keep the image small:
+#   pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+transformers==4.46.3
+torch==2.5.1
