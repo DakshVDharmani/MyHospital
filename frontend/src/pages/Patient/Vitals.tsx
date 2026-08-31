@@ -6,7 +6,7 @@ import { useProfile } from '../../lib/useProfile';
 import { patientNav } from './nav';
 import { VitalsCheckIn } from '../../voice-widget/vitals/VitalsCheckIn';
 import { VitalsHistory } from '../../voice-widget/vitals/VitalsHistory';
-import { fetchRecentVitals, type VitalsRow } from '../../voice-widget/vitals/vitalsApi';
+import { ensureDailyVitalsReminder, fetchRecentVitals, type VitalsRow } from '../../voice-widget/vitals/vitalsApi';
 import '../../components/dashboard.css';
 
 const VOICE_BACKEND_URL = import.meta.env.VITE_VOICE_BACKEND_URL as string | undefined;
@@ -78,6 +78,13 @@ function buildRings(rowsNewestFirst: VitalsRow[]): Ring[] {
       icon: Droplet,
     },
   ];
+}
+
+function localDateKey(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function dayLabel(isoDate: string): string {
@@ -169,7 +176,12 @@ export default function PatientVitals() {
   const refresh = useCallback(() => {
     if (!patientId) return;
     fetchRecentVitals(patientId, 15)
-      .then(setRows)
+      .then((nextRows) => {
+        setRows(nextRows);
+        void ensureDailyVitalsReminder(patientId, nextRows).catch((error) => {
+          console.error('Could not create the daily vitals reminder.', error);
+        });
+      })
       .catch((e) => setRowsError(e.message || "Couldn't load your vitals."));
   }, [patientId]);
 
@@ -178,7 +190,13 @@ export default function PatientVitals() {
   }, [refresh]);
 
   const rowsNewestFirst = useMemo(() => [...(rows ?? [])].reverse(), [rows]);
-  const rings = useMemo(() => buildRings(rowsNewestFirst), [rowsNewestFirst]);
+  // The dashboard snapshot is intentionally daily. Older values remain in
+  // history/trends, but must never look like today's measurements.
+  const todayRowsNewestFirst = useMemo(
+    () => rowsNewestFirst.filter((row) => row.log_date === localDateKey()),
+    [rowsNewestFirst],
+  );
+  const rings = useMemo(() => buildRings(todayRowsNewestFirst), [todayRowsNewestFirst]);
   const heartRateTrend = useMemo(() => dailyTrend(rows ?? [], 'heart_rate_bpm'), [rows]);
   const glucoseTrend = useMemo(() => dailyTrend(rows ?? [], 'glucose_mgdl'), [rows]);
   const log = useMemo(() => buildLog(rowsNewestFirst), [rowsNewestFirst]);
@@ -232,6 +250,14 @@ export default function PatientVitals() {
       {rowsError && <div className="dc-page-intro"><p style={{ color: '#E5544A' }}>{rowsError}</p></div>}
 
       <div className="dc-section">
+        {rows !== null && todayRowsNewestFirst.length === 0 && (
+          <div className="dc-card" style={{ marginBottom: 16, borderColor: '#F0C36A', background: '#FFF9EC' }}>
+            <div className="dc-card-title">Today’s vitals are waiting</div>
+            <p className="dc-section-sub" style={{ marginTop: 6 }}>
+              Your daily snapshot resets each day. Add today’s readings to complete your check-in.
+            </p>
+          </div>
+        )}
         <div className="dc-ring-grid">
           {rings.map((r) => <RingGauge key={r.label} ring={r} />)}
         </div>

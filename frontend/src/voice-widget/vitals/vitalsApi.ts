@@ -53,3 +53,45 @@ export async function fetchRecentVitals(patientId: string, days = 15): Promise<V
   if (error) throw error;
   return data ?? [];
 }
+
+function localDayBounds(date = new Date()) {
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+/** Add at most one reminder today when the patient has not logged vitals. */
+export async function ensureDailyVitalsReminder(patientId: string, rows: VitalsRow[]): Promise<void> {
+  const today = new Date();
+  const logDate = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, "0"),
+    String(today.getDate()).padStart(2, "0"),
+  ].join("-");
+
+  if (rows.some((row) => row.log_date === logDate)) return;
+
+  const { start, end } = localDayBounds(today);
+  const { data, error: lookupError } = await supabase
+    .from("notifications")
+    .select("notif_id")
+    .eq("id", patientId)
+    .eq("type", "vitals_missing")
+    .gte("created_at", start)
+    .lt("created_at", end)
+    .limit(1);
+  if (lookupError) throw lookupError;
+  if (data && data.length > 0) return;
+
+  const { error } = await supabase.from("notifications").insert({
+    id: patientId,
+    urgency: 2,
+    title: "Log today's vitals",
+    message: "Your vitals have not been entered today. Please complete your daily check-in.",
+    type: "vitals_missing",
+    link: "/patient/vitals",
+    metadata: { log_date: logDate },
+  });
+  if (error) throw error;
+}
