@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   FileText,
   FlaskConical,
@@ -7,10 +8,18 @@ import {
   Stethoscope,
   Download,
   Search,
+  FileDown,
+  Mic,
 } from 'lucide-react';
 import { DashboardLayout } from '../../components/DashboardLayout';
 import { useProfile } from '../../lib/useProfile';
 import { patientNav } from './nav';
+import {
+  useConsultationRecords,
+  useConsultationRecordsRealtime,
+  type ConsultationRecord,
+} from '../../lib/consultations';
+import { downloadConsultationPdf, downloadConsultationTxt } from '../../lib/consultationDoc';
 import '../../components/dashboard.css';
 
 type Category = 'All' | 'Lab' | 'Imaging' | 'Prescription' | 'Visit' | 'Immunization';
@@ -45,16 +54,48 @@ const ICONS: Record<string, typeof FileText> = {
 
 const FILTERS: Category[] = ['All', 'Lab', 'Imaging', 'Prescription', 'Visit', 'Immunization'];
 
+const fmtDate = (iso: string) =>
+  new Date(iso).toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' });
+
+function summaryTag(r: ConsultationRecord): { tag: string; cls: string } {
+  if (r.status === 'final') return { tag: 'Finalised', cls: 'dc-pill' };
+  if (r.summaryStatus === 'ready') return { tag: 'Summary ready', cls: 'dc-pill dc-pill-blue' };
+  if (r.summaryStatus === 'pending') return { tag: 'Summarising…', cls: 'dc-pill dc-pill-amber' };
+  if (r.summaryStatus === 'failed') return { tag: 'Transcript only', cls: 'dc-pill dc-pill-grey' };
+  return { tag: 'Draft', cls: 'dc-pill dc-pill-grey' };
+}
+
 export default function PatientMedicalRecords() {
   const { name, loading } = useProfile();
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<Category>('All');
   const [query, setQuery] = useState('');
 
-  const rows = useMemo(
+  useConsultationRecordsRealtime();
+  const { data: consultations = [] } = useConsultationRecords();
+
+  const mockRows = useMemo(
     () =>
-      RECORDS.filter((r) => (filter === 'All' || r.category === filter) && r.title.toLowerCase().includes(query.toLowerCase())),
-    [filter, query]
+      RECORDS.filter(
+        (r) =>
+          (filter === 'All' || r.category === filter) &&
+          r.title.toLowerCase().includes(query.toLowerCase()),
+      ),
+    [filter, query],
   );
+
+  const consultRows = useMemo(
+    () =>
+      (filter === 'All' || filter === 'Visit'
+        ? consultations
+        : []
+      ).filter((r) =>
+        `${r.title} ${r.doctorName} ${r.reason}`.toLowerCase().includes(query.toLowerCase()),
+      ),
+    [consultations, filter, query],
+  );
+
+  const totalCount = RECORDS.length + consultations.length;
 
   return (
     <DashboardLayout
@@ -66,13 +107,13 @@ export default function PatientMedicalRecords() {
     >
       <div className="dc-page-intro">
         <h1>Medical records</h1>
-        <p>Your complete health history in one secure place — labs, imaging, prescriptions, visits and immunizations. Download anything as a PDF.</p>
+        <p>Your complete health history in one secure place — labs, imaging, prescriptions, visits and immunizations. Every video consultation is transcribed and summarised here; download anything as a PDF.</p>
       </div>
 
       <div className="dc-stat-row dc-section">
         {[
-          { label: 'Total records', value: RECORDS.length, icon: FileText, c: '#2C7FF2', bg: 'rgba(44,127,242,0.12)' },
-          { label: 'Lab results', value: RECORDS.filter((r) => r.category === 'Lab').length, icon: FlaskConical, c: '#0B7A70', bg: 'rgba(14,156,143,0.12)' },
+          { label: 'Total records', value: totalCount, icon: FileText, c: '#2C7FF2', bg: 'rgba(44,127,242,0.12)' },
+          { label: 'Consultations', value: consultations.length, icon: Stethoscope, c: '#0B7A70', bg: 'rgba(14,156,143,0.12)' },
           { label: 'Active prescriptions', value: RECORDS.filter((r) => r.category === 'Prescription').length, icon: Pill, c: '#b8860b', bg: 'rgba(250,178,25,0.18)' },
           { label: 'Needs review', value: 1, icon: Stethoscope, c: '#d03b3b', bg: 'rgba(208,59,59,0.12)' },
         ].map((s) => {
@@ -114,7 +155,47 @@ export default function PatientMedicalRecords() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => {
+            {consultRows.map((r) => {
+              const { tag, cls } = summaryTag(r);
+              return (
+                <tr
+                  key={r.id}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => navigate(`/consultation/${r.id}`)}
+                >
+                  <td>
+                    <div className="dc-table-name">
+                      <span className="dc-table-av"><Mic size={14} /></span>
+                      {r.title}
+                    </div>
+                  </td>
+                  <td><span className="dc-pill dc-pill-grey">Visit</span></td>
+                  <td>{r.doctorName || '—'}</td>
+                  <td>{fmtDate(r.endedAt ?? r.createdAt)}</td>
+                  <td><span className={cls}>{tag}</span></td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
+                    <button
+                      className="dc-icon-action"
+                      aria-label={`Download ${r.title} transcript`}
+                      title="Transcript (.txt)"
+                      onClick={() => downloadConsultationTxt(r)}
+                    >
+                      <FileText size={14} />
+                    </button>
+                    <button
+                      className="dc-icon-action"
+                      aria-label={`Download ${r.title} as PDF`}
+                      title="Summary (PDF)"
+                      onClick={() => downloadConsultationPdf(r)}
+                    >
+                      <FileDown size={14} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+
+            {mockRows.map((r) => {
               const Icon = ICONS[r.category] ?? FileText;
               return (
                 <tr key={r.id}>
@@ -134,7 +215,8 @@ export default function PatientMedicalRecords() {
                 </tr>
               );
             })}
-            {rows.length === 0 && (
+
+            {consultRows.length === 0 && mockRows.length === 0 && (
               <tr><td colSpan={6}><div className="dc-empty">No records match your filters.</div></td></tr>
             )}
           </tbody>

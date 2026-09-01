@@ -3,7 +3,6 @@ import LandingPage from "./pages/Landing/LandingPage";
 import HealthcareAuthPage from "./pages/Healthcare/AuthPage";
 import PatientHome from "./pages/Patient/PatientHome";
 import PatientSecureChat from "./pages/Patient/SecureChat";
-import PatientConsultation from "./pages/Patient/Consultation";
 import PatientAppointments from "./pages/Patient/Appointments";
 import PatientVitals from "./pages/Patient/Vitals";
 import PatientMedicalRecords from "./pages/Patient/MedicalRecords";
@@ -11,9 +10,9 @@ import PatientXaiHelp from "./pages/Patient/XaiHelp";
 import DoctorHome from "./pages/Doctor/DoctorHome";
 import DoctorSecureChat from "./pages/Doctor/SecureChat";
 import DoctorManagingPatients from "./pages/Doctor/ManagingPatients";
-import DoctorConsultation from "./pages/Doctor/Consultation";
 import DoctorAppointments from "./pages/Doctor/Appointments";
 import VideoCall from "./pages/shared/VideoCall";
+import ConsultationRecordPage from "./pages/shared/ConsultationRecord";
 import { VoiceWidget } from "./voice-widget/VoiceWidget";
 import { RouteTransition } from "./components/RouteTransition";
 
@@ -29,7 +28,6 @@ function App() {
 
         <Route path="/patient/home" element={<PatientHome />} />
         <Route path="/patient/chat" element={<PatientSecureChat />} />
-        <Route path="/patient/consultation" element={<PatientConsultation />} />
         <Route path="/patient/appointments" element={<PatientAppointments />} />
         <Route path="/patient/vitals" element={<PatientVitals />} />
         <Route path="/patient/call/:appointmentId" element={<VideoCall />} />
@@ -39,9 +37,10 @@ function App() {
         <Route path="/doctor/home" element={<DoctorHome />} />
         <Route path="/doctor/chat" element={<DoctorSecureChat />} />
         <Route path="/doctor/patients" element={<DoctorManagingPatients />} />
-        <Route path="/doctor/consultation" element={<DoctorConsultation />} />
         <Route path="/doctor/appointments" element={<DoctorAppointments />} />
         <Route path="/doctor/call/:appointmentId" element={<VideoCall />} />
+
+        <Route path="/consultation/:recordId" element={<ConsultationRecordPage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
