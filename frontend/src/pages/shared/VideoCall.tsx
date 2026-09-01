@@ -10,6 +10,9 @@ import {
   Loader2,
   RefreshCw,
   ShieldCheck,
+  FileText,
+  FileDown,
+  CircleCheck,
 } from 'lucide-react';
 import { useProfile } from '../../lib/useProfile';
 import {
@@ -20,6 +23,14 @@ import {
   type Appointment,
 } from '../../lib/appointments';
 import { useWebRtcRoom } from '../../lib/webrtc';
+import { useCallTranscript } from '../../lib/useCallTranscript';
+import {
+  createConsultationRecord,
+  fetchConsultationRecord,
+  summarizeConsultation,
+  type ConsultationRecord,
+} from '../../lib/consultations';
+import { downloadConsultationPdf, downloadConsultationTxt } from '../../lib/consultationDoc';
 
 const STATUS_TEXT: Record<string, string> = {
   idle: 'Ready',
@@ -56,12 +67,19 @@ function Stream({ stream, muted, mirror }: { stream: MediaStream | null; muted?:
 export default function VideoCall() {
   const { appointmentId = '' } = useParams();
   const navigate = useNavigate();
-  const { id: myId, role, loading: profileLoading } = useProfile();
+  const { id: myId, name: myName, role, loading: profileLoading } = useProfile();
 
   const [appt, setAppt] = useState<Appointment | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [joined, setJoined] = useState(false);
   const [notFound, setNotFound] = useState(false);
+
+  // Post-call: the doctor's device saves the meeting record + kicks the summary.
+  const [phase, setPhase] = useState<'call' | 'saving' | 'done'>('call');
+  const [savedRecord, setSavedRecord] = useState<ConsultationRecord | null>(null);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [summaryNote, setSummaryNote] = useState<string | null>(null);
+  const startedAtRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +99,11 @@ export default function VideoCall() {
   const isDoctor = role === 'doctor';
   const peerName = appt ? (isDoctor ? appt.patientName : appt.doctorName) : '';
 
+  const speakerLabel = isDoctor
+    ? `Dr. ${myName || 'Doctor'}`
+    : myName || appt?.patientName || 'Patient';
+  const transcript = useCallTranscript(speakerLabel);
+
   // Use the appointment id itself as the room key — it is exactly what is in
   // the URL, so "same link" always means "same room" for both parties.
   const room = joined && appt ? appt.id : null;
@@ -90,14 +113,64 @@ export default function VideoCall() {
     if (joined && appt) void markMeetingStarted(appt.id).catch(() => {});
   }, [joined, appt]);
 
+  // Start live speech-to-text once the call actually connects.
+  useEffect(() => {
+    if (call.status === 'connected' && !transcript.capturing && phase === 'call') {
+      if (!startedAtRef.current) startedAtRef.current = new Date().toISOString();
+      transcript.start();
+    }
+  }, [call.status, transcript, phase]);
+
+  const backToList = isDoctor ? '/doctor/appointments' : '/patient/appointments';
+
   const leave = async (complete = false) => {
+    transcript.stop();
     call.hangUp();
     if (appt) await markMeetingEnded(appt.id, complete).catch(() => {});
+
+    // Only the doctor's device persists the consultation record.
+    const worthSaving = complete || transcript.lines.length > 0;
+    if (isDoctor && appt && worthSaving) {
+      setJoined(false);
+      setPhase('saving');
+      try {
+        const rec = await createConsultationRecord({
+          appointmentId: appt.id,
+          patientId: appt.patientId,
+          doctorName: appt.doctorName || speakerLabel,
+          patientName: appt.patientName,
+          title: `${APPT_TYPE_LABEL[appt.appointmentType]} · ${new Date().toLocaleDateString()}`,
+          reason: appt.reason || appt.title,
+          startedAt: startedAtRef.current,
+          endedAt: new Date().toISOString(),
+          transcript: transcript.toPlainText(),
+        });
+        setSavedRecord(rec);
+        setPhase('done');
+        setSummaryNote('Generating the structured summary…');
+        void summarizeConsultation(rec.id).then(async (res) => {
+          const fresh = await fetchConsultationRecord(rec.id).catch(() => null);
+          if (fresh) setSavedRecord(fresh);
+          setSummaryNote(
+            res.summaryStatus === 'ready'
+              ? 'Structured summary is ready.'
+              : res.summaryStatus === 'skipped'
+                ? 'Too little speech was captured to summarise — the transcript is saved.'
+                : 'Automatic summary is unavailable — the full transcript is saved to the record.',
+          );
+        });
+      } catch (e) {
+        setSaveErr((e as Error).message);
+        setPhase('done');
+      }
+      return;
+    }
+
     setJoined(false);
-    navigate(isDoctor ? '/doctor/appointments' : '/patient/appointments');
+    navigate(backToList);
   };
 
-  const backHref = isDoctor ? '/doctor/appointments' : '/patient/appointments';
+  const backHref = backToList;
   const heading = useMemo(() => {
     if (!appt) return 'Video consultation';
     return `${APPT_TYPE_LABEL[appt.appointmentType]} · ${appt.title}`;
@@ -139,6 +212,19 @@ export default function VideoCall() {
           padding: 26px; max-width: 420px; }
         .vc-name-lg { font-size: 18px; font-weight: 800; }
         .vc-muted { color: #8aa; font-size: 12.5px; line-height: 1.5; }
+        .vc-rec { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 800;
+          letter-spacing: 0.4px; text-transform: uppercase; padding: 4px 9px; border-radius: 999px;
+          background: rgba(229,84,74,0.14); border: 1px solid rgba(229,84,74,0.4); color: #ffb4ad; }
+        .vc-rec-dot { width: 7px; height: 7px; border-radius: 50%; background: #e5544a; animation: vc-pulse 1.4s ease-in-out infinite; }
+        @keyframes vc-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+        .vc-caption { position: absolute; left: 50%; transform: translateX(-50%); bottom: 24px; max-width: 80%;
+          background: rgba(4,10,15,0.72); color: #eef; font-size: 14px; line-height: 1.45; padding: 8px 14px;
+          border-radius: 10px; text-align: center; backdrop-filter: blur(3px); }
+        .vc-card.wide { max-width: 560px; text-align: left; }
+        .vc-doc-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+        .vc-note { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700;
+          color: #bfe9df; background: rgba(14,156,143,0.12); border: 1px solid rgba(14,156,143,0.3);
+          padding: 7px 11px; border-radius: 9px; margin-top: 14px; }
       `}</style>
 
       <div className="vc-top">
@@ -149,7 +235,12 @@ export default function VideoCall() {
           <div className="vc-title">{heading}</div>
           <div className="vc-sub">{peerName ? `with ${peerName}` : 'Secure peer-to-peer video'}</div>
         </div>
-        <span className="vc-pill">
+        {transcript.capturing && phase === 'call' && (
+          <span className="vc-rec" title="This visit is being transcribed on your device">
+            <span className="vc-rec-dot" /> Rec · transcript
+          </span>
+        )}
+        <span className="vc-pill" style={{ marginLeft: transcript.capturing ? 8 : 'auto' }}>
           <span
             className={`vc-dot ${
               call.status === 'connected' ? '' : call.status === 'failed' ? 'bad' : 'warn'
@@ -168,11 +259,85 @@ export default function VideoCall() {
             <div className="vc-local">
               <Stream stream={call.localStream} muted mirror />
             </div>
+            {transcript.interim && <div className="vc-caption">{transcript.interim}</div>}
+            {transcript.error && (
+              <div className="vc-caption" style={{ bottom: 72, color: '#ffb4ad' }}>
+                {transcript.error}
+              </div>
+            )}
           </>
         )}
 
+        {/* Post-call: doctor's device saved the meeting record */}
+        {(phase === 'saving' || phase === 'done') && (
+          <div className="vc-overlay">
+            {phase === 'saving' ? (
+              <>
+                <Loader2 className="vc-spin" size={26} />
+                <div className="vc-muted">Saving the consultation record…</div>
+              </>
+            ) : (
+              <div className="vc-card wide">
+                <CircleCheck size={26} style={{ color: '#35c07a' }} />
+                <div className="vc-name-lg" style={{ marginTop: 8 }}>
+                  Consultation recorded
+                </div>
+                <p className="vc-muted">
+                  The full meeting transcript has been saved to{' '}
+                  {savedRecord?.patientName || 'the patient'}’s medical records
+                  {saveErr ? '' : ' with an AI-structured summary and your advice'}.
+                </p>
+                {saveErr && (
+                  <p className="vc-muted" style={{ color: '#ffb4ad' }}>
+                    The record could not be saved: {saveErr}
+                  </p>
+                )}
+                {summaryNote && !saveErr && (
+                  <span className="vc-note">
+                    <FileText size={13} /> {summaryNote}
+                  </span>
+                )}
+                {savedRecord && (
+                  <>
+                    <div className="vc-doc-row">
+                      <button
+                        className="vc-cta secondary"
+                        onClick={() => downloadConsultationTxt(savedRecord)}
+                      >
+                        <FileText size={14} /> Transcript (.txt)
+                      </button>
+                      <button
+                        className="vc-cta secondary"
+                        onClick={() => downloadConsultationPdf(savedRecord)}
+                      >
+                        <FileDown size={14} /> Summary (PDF)
+                      </button>
+                      <button
+                        className="vc-cta"
+                        onClick={() => navigate(`/consultation/${savedRecord.id}`)}
+                      >
+                        Review &amp; edit record
+                      </button>
+                    </div>
+                    <p className="vc-muted" style={{ fontSize: 11, marginTop: 12 }}>
+                      PDF is generated in your browser with jsPDF.
+                    </p>
+                  </>
+                )}
+                <button
+                  className="vc-cta secondary"
+                  style={{ marginTop: 14 }}
+                  onClick={() => navigate(backToList)}
+                >
+                  Back to appointments
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Pre-join / states */}
-        {!joined && (
+        {!joined && phase === 'call' && (
           <div className="vc-overlay">
             {profileLoading || (!appt && !notFound && !loadErr) ? (
               <>

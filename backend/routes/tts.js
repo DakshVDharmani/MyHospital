@@ -15,10 +15,10 @@ router.post("/", rateLimit, async (req, res) => {
     const lang = getLang(langCode);
     const speakerName = speaker || lang.speaker;
 
-    // bulbul:v2 caps input at 1500 chars. Rather than fail with 400 and go
+    // Bulbul v3 caps REST input at 2500 chars. Rather than fail with 400 and go
     // silent, trim to the last full sentence that fits so we always speak
     // *something* back.
-    const MAX_CHARS = 1450;
+    const MAX_CHARS = 2400;
     let text = rawText;
     if (text.length > MAX_CHARS) {
       const cut = text.slice(0, MAX_CHARS);
@@ -40,8 +40,8 @@ router.post("/", rateLimit, async (req, res) => {
         speaker: speakerName,
         model: TTS_MODEL,
         speech_sample_rate: 16000,
-        // pitch/loudness/enable_preprocessing are bulbul:v2-only params
-        pitch: pitch !== 0 ? pitch : undefined,
+        // Bulbul v3 performs preprocessing automatically. Pitch and loudness
+        // are intentionally omitted because v3 does not support them.
       },
     });
 

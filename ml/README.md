@@ -130,6 +130,36 @@ uvicorn service.main:app --reload
   risk with a `rank`** — this is the endpoint the doctor dashboard's queue
   would call.
 
+### `POST /route` — domain + need bracket
+
+Takes a free-text `complaint` (plus optional vitals / `cc_*` flags) and returns:
+
+```json
+{ "specialty": "cardiology", "specialty_confidence": 0.71,
+  "specialty_scores": { "cardiology": 0.71, "general_medicine": 0.12, ... },
+  "risk_score": 3.8, "esi_label": "ESI 2", "need_bracket": "urgent",
+  "model_version": "xgb-triage + typeform/distilbert-base-uncased-mnli" }
+```
+
+- **Specialty** (the patient's domain) comes from a pre-trained zero-shot
+  classifier — `typeform/distilbert-base-uncased-mnli`, a DistilBERT/MNLI
+  model, **not an LLM** — posing each specialty as an entailment hypothesis
+  (`service/specialty_router.py`). No training, loaded from the HF hub.
+- **need_bracket** buckets the trained triage-risk score into
+  `critical / urgent / moderate / stable` (aligns with `priority.ts` and
+  `patients.distress_severity`).
+
+The DB side: `doctors` table (one profile row per doctor user, `specialty`
+enum), `triage_assessments` (persisted routing result), and
+`match_doctors(specialty, bracket, limit)` which ranks in-specialty doctors —
+higher-need patients get the most experienced, least-loaded ones. The
+frontend glue is `frontend/src/lib/triage.ts` → `routePatient()`.
+
+Needs `torch` + `transformers` (see `service/requirements.txt`); first
+`/route` call downloads/caches the ~250 MB model.
+
+---
+
 A patient object doesn't need every field: anything omitted is treated as
 unknown and imputed the same way the training data's missing values were
 (median for numeric/vitals, most-frequent for everything else) — so a caller

@@ -273,7 +273,7 @@ export function DashboardLayout({ roleLabel, name, eyebrow, pageTitle, navItems,
     // The only page that does anything with a chosen doctor today is the
     // patient booking flow — a doctor searching the same directory just
     // gets the picked name filled into the box, no navigation.
-    if (roleLabel === 'Patient') navigate('/patient/consultation');
+    if (roleLabel === 'Patient') navigate('/patient/appointments');
   };
 
   const handleLogout = async () => {

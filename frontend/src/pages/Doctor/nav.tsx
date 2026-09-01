@@ -2,7 +2,6 @@ import {
   Home,
   ShieldCheck,
   Users,
-  Stethoscope,
   CalendarDays,
 } from 'lucide-react';
 import type { NavItem } from '../../components/DashboardLayout';
@@ -14,7 +13,6 @@ export function doctorNav(active: string): NavItem[] {
     { label: 'Home', icon: <Home size={16} />, to: '/doctor/home' },
     { label: 'Secure Chat', icon: <ShieldCheck size={16} />, to: '/doctor/chat' },
     { label: 'Managing Patients', icon: <Users size={16} />, to: '/doctor/patients' },
-    { label: 'Consultation', icon: <Stethoscope size={16} />, to: '/doctor/consultation' },
     { label: 'Appointments', icon: <CalendarDays size={16} />, to: '/doctor/appointments' },
   ].map((i) => ({ ...i, active: i.label === active }));
 }

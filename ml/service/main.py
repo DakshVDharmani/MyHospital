@@ -26,6 +26,7 @@ ML_ROOT = SERVICE_DIR.parent
 sys.path.insert(0, str(SERVICE_DIR))
 
 from risk_model import RiskModel  # noqa: E402
+import specialty_router  # noqa: E402
 
 MODEL_PATH = ML_ROOT / "weights" / "model.joblib"
 
@@ -83,6 +84,98 @@ class ExplainResult(RiskResult):
 
 class PrioritizedResult(RiskResult):
     rank: int
+
+
+# --- Domain routing + need bracket -----------------------------------------
+
+# Cheap keyword -> chief-complaint-flag extraction so a free-text complaint
+# alone still gives the triage-risk model real signal (not just imputed
+# medians). Keys are substrings; values are `cc_*` feature columns the model
+# was trained on.
+_CC_KEYWORDS = {
+    "chest pain": "cc_chestpain", "palpitation": "cc_palpitations",
+    "short of breath": "cc_shortnessofbreath", "shortness of breath": "cc_shortnessofbreath",
+    "difficulty breathing": "cc_breathingproblem", "can't breathe": "cc_breathingproblem",
+    "stroke": "cc_strokealert", "face droop": "cc_strokealert", "slurred speech": "cc_strokealert",
+    "seizure": "cc_seizure", "numbness": "cc_numbness", "weak": "cc_weakness",
+    "headache": "cc_headache", "dizzy": "cc_dizziness", "faint": "cc_syncope",
+    "abdominal pain": "cc_abdominalpain", "stomach pain": "cc_abdominalpain",
+    "vomit": "cc_vomiting", "diarrhea": "cc_diarrhea", "bleeding": "cc_bleeding",
+    "fever": "cc_fever", "cough": "cc_cough", "rash": "cc_rash",
+    "back pain": "cc_backpain", "knee pain": "cc_kneepain", "ankle": "cc_anklepain",
+    "injury": "cc_injury", "fall": "cc_fall", "trauma": "cc_fulltrauma",
+    "suicidal": "cc_suicidal", "depress": "cc_depression", "anxiety": "cc_anxiety",
+    "psych": "cc_psychiatricevaluation", "overdose": "cc_overdose",
+    "allergic": "cc_allergicreaction", "cardiac arrest": "cc_cardiacarrest",
+    "ear pain": "cc_earpain", "dental": "cc_dentalpain", "tooth": "cc_dentalpain",
+    "pregnan": "cc_abdominalpainpregnant", "eye": "cc_eyeproblem", "vision": "cc_visionproblem",
+}
+
+
+def _bracket(risk_score: float) -> str:
+    if risk_score >= 4.5:
+        return "critical"
+    if risk_score >= 3.5:
+        return "urgent"
+    if risk_score >= 2.5:
+        return "moderate"
+    return "stable"
+
+
+class RouteRequest(BaseModel):
+    """A patient presenting a complaint. `complaint` (free text) is required;
+    `vitals` / any extra `cc_*` or history flags are optional and merged into
+    the risk model's feature record for a sharper score."""
+
+    patient_id: Optional[str] = None
+    complaint: str
+
+    class Config:
+        extra = "allow"
+
+
+class RouteResult(BaseModel):
+    patient_id: Optional[str] = None
+    specialty: str
+    specialty_confidence: float
+    specialty_scores: dict
+    risk_score: float
+    esi_label: str
+    need_bracket: str
+    model_version: str
+
+
+@app.post("/route", response_model=RouteResult)
+def route(req: RouteRequest):
+    """Zero-shot-classifies the complaint into a medical specialty (the
+    patient's domain), scores clinical urgency with the trained triage model,
+    and buckets that into a need bracket (critical / urgent / moderate /
+    stable). The caller persists this to `triage_assessments` and matches
+    doctors via the `match_doctors()` SQL function."""
+    model = _require_model()
+
+    routed = specialty_router.route(req.complaint)
+
+    record = req.model_dump(exclude={"patient_id", "complaint"})
+    low = req.complaint.lower()
+    for kw, col in _CC_KEYWORDS.items():
+        if kw in low:
+            record.setdefault(col, 1)
+    try:
+        risk = model.score_records([record])[0]
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+    return RouteResult(
+        patient_id=req.patient_id,
+        specialty=routed["specialty"],
+        specialty_confidence=routed["confidence"],
+        specialty_scores=routed["scores"],
+        risk_score=risk["risk_score"],
+        esi_label=risk["priority_label"],
+        need_bracket=_bracket(risk["risk_score"]),
+        model_version=f"xgb-triage + {specialty_router.MODEL_NAME}",
+    )
 
 
 def _require_model() -> RiskModel:

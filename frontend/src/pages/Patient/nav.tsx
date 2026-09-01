@@ -1,7 +1,6 @@
 import {
   Home,
   ShieldCheck,
-  Stethoscope,
   CalendarDays,
   HeartPulse,
   FolderClock,
@@ -15,7 +14,6 @@ export function patientNav(active: string): NavItem[] {
   return [
     { label: 'Home', icon: <Home size={16} />, to: '/patient/home' },
     { label: 'Secure Chat', icon: <ShieldCheck size={16} />, to: '/patient/chat' },
-    { label: 'Consultation', icon: <Stethoscope size={16} />, to: '/patient/consultation' },
     { label: 'Appointments', icon: <CalendarDays size={16} />, to: '/patient/appointments' },
     { label: 'Vitals', icon: <HeartPulse size={16} />, to: '/patient/vitals' },
     { label: 'Medical Records', icon: <FolderClock size={16} />, to: '/patient/records' },
