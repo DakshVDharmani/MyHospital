@@ -12,7 +12,7 @@ multilingual voice assistant, explainable-AI health insights, and an
 
 <br/>
 
-`React 19` · `Vite 6` · `TypeScript` · `Tailwind v4` · `Supabase (Auth · Postgres · Realtime)` · `Express` · `Sarvam AI` · `Groq`
+`React 19` · `Vite 6` · `TypeScript` · `Tailwind v4` · `Supabase (Auth · Postgres · Realtime)` · `Express` · `Sarvam AI` · `Groq` · `XGBoost / FastAPI` · `Pinecone RAG`
 
 </div>
 
@@ -23,6 +23,8 @@ multilingual voice assistant, explainable-AI health insights, and an
 - [Why MyHospital](#why-myhospital)
 - [Feature tour](#feature-tour)
 - [Secure Chat — the flagship](#secure-chat--the-flagship)
+- [ML triage-risk & specialty routing](#ml-triage-risk--specialty-routing)
+- [RAG-grounded voice assistant](#rag-grounded-voice-assistant)
 - [Architecture](#architecture)
 - [Tech stack](#tech-stack)
 - [Repository layout](#repository-layout)
@@ -61,9 +63,10 @@ MyHospital is that layer:
 |---|---|
 | **Home** | Snapshot of vitals trend, upcoming appointments, unread messages |
 | **Secure Chat** | Real-time, encrypted 1-to-1 messaging with the care team |
-| **Consultation** | Book a video or in-person slot with a chosen doctor |
+| **Appointments** | Request, reschedule, or cancel a visit with a chosen doctor — backed by `public.appointments`, not mock data |
+| **Video call** | In-browser WebRTC consultation (peer-to-peer, no media server); live captioned transcript |
 | **Vitals** | Heart rate, blood pressure, SpO₂, glucose — rings + history charts |
-| **Medical Records** | Documents, prescriptions and lab results |
+| **Medical Records** | Documents, prescriptions, lab results, **and past consultation records** (AI summary + transcript, downloadable as PDF/TXT) |
 | **XAI Help** | Every AI suggestion shown as a reasoning graph + confidence ring, with a plain-language summary and thumbs up/down feedback |
 
 ### 🩺 Clinician portal  &nbsp;`/doctor/*`
@@ -72,9 +75,9 @@ MyHospital is that layer:
 |---|---|
 | **Home** | Live triage queue ranked `critical → urgent → moderate → stable`, wait times, workload charts |
 | **Secure Chat** | Same messaging surface, doctor side; start a new thread with any patient |
-| **Managing Patients** | Full patient list with condition, adherence %, next appointment, status filters |
-| **Consultation** | Run the current consult — notes, vitals, next steps |
-| **Appointments** | Day/week schedule management |
+| **Managing Patients** | A **live, priority-ordered panel** (`doctor_patient_panel()` RPC) — every triage assessment auto-routes a patient to a doctor and keeps urgency fresh via the `triage_shift_patient` trigger, so the list is never hand-maintained |
+| **Appointments** | Day/week schedule management against `public.appointments`; confirm/decline requests |
+| **Video call** | Run the current consult over WebRTC; live transcript captured locally, then AI-summarised into the record when the call ends |
 
 ### 🎙️ Multilingual voice assistant
 
@@ -153,6 +156,57 @@ Relevant code: [`src/lib/crypto.ts`](frontend/src/lib/crypto.ts),
 
 ---
 
+## ML triage-risk & specialty routing
+
+A standalone **FastAPI service** (`ml/`) that turns a patient's vitals,
+presenting complaint, and history into an actual clinical priority — replacing
+what would otherwise be a hand-maintained "who's sickest" list.
+
+- **Model:** XGBoost regressor trained on 560K+ real ED visits
+  ([Kaggle: Hospital Triage and Patient History Data](https://www.kaggle.com/datasets/maalona/hospital-triage-and-patient-history-data)),
+  predicting an inverted **ESI** (Emergency Severity Index) so higher output =
+  higher urgency. ~570 input features (7 triage vitals + chief-complaint /
+  medical-history / prior-utilization flags); anything a caller omits is
+  imputed the way training data's missing values were.
+- **`POST /route`** — free-text complaint → specialty (via a zero-shot
+  DistilBERT/MNLI entailment classifier, *not* an LLM) + risk score + a
+  `critical / urgent / moderate / stable` need bracket. The result is
+  persisted to `triage_assessments`, and `match_doctors()` ranks in-specialty
+  doctors so higher-need patients land with the most experienced, least-loaded
+  one. This is what feeds the doctor panel's `triage_shift_patient` trigger.
+- **`POST /explain`** — real per-prediction SHAP contributions (not mock
+  data), rendered by the patient-facing **XAI Help** reasoning graph.
+- **`POST /prioritize`** — a patient list, ranked.
+
+Frontend glue: [`frontend/src/lib/triage.ts`](frontend/src/lib/triage.ts)
+(`routePatient()`), [`frontend/src/lib/riskModel.ts`](frontend/src/lib/riskModel.ts)
+(`/explain`). Deploys as a Docker image to Railway
+(root directory `ml/`) — see [`ml/README.md`](ml/README.md) for the full
+dataset/training/deploy writeup.
+
+---
+
+## RAG-grounded voice assistant
+
+`rag-system/` is a small local service that grounds the voice assistant's
+chat answers in this project's own docs, instead of letting it hallucinate
+about the product.
+
+- Embeds content **locally** with `Xenova/multilingual-e5-small` (no
+  embedding API cost) and stores vectors + source metadata in **Pinecone**.
+- `npm run index` walks the README, frontend source, safe backend
+  route/config source, and `rag-system/knowledge/` — skipping env files,
+  databases, dependencies, builds, and patient data — and (re)builds the
+  index whenever the product changes.
+- At chat time, the Express voice backend's `chat.js` route calls
+  `RAG_SERVICE_URL/retrieve` to fetch relevant chunks before asking Sarvam to
+  answer — if the RAG service isn't configured or is down, the assistant
+  degrades gracefully and answers without that grounding.
+
+See [`rag-system/README.md`](rag-system/README.md) for setup.
+
+---
+
 ## Architecture
 
 ```mermaid
@@ -161,13 +215,16 @@ flowchart TD
         UI["Patient & Doctor portals"]
         VW["Voice widget"]
         SC["Secure Chat hook<br/>(Realtime + Web Crypto)"]
+        RTC["WebRTC video call<br/>+ live transcript"]
     end
 
     subgraph Supabase["Supabase"]
         AUTH["Auth (JWT)"]
-        PG[("Postgres<br/>users · conversations · messages<br/>message_receipts · notifications")]
+        PG[("Postgres<br/>users · conversations · messages<br/>appointments · notifications<br/>doctors · triage_assessments<br/>consultation_records")]
         RT["Realtime<br/>Changes · Broadcast · Presence"]
         RLS{{"Row Level Security"}}
+        EF["Edge Function<br/>summarize-consultation"]
+        CRON["pg_cron<br/>run_appointment_reminders"]
     end
 
     subgraph Backend["Express voice server (optional)"]
@@ -175,14 +232,26 @@ flowchart TD
         GROQ["Groq — Whisper STT"]
     end
 
+    subgraph MLSvc["ML risk service (Railway, optional)"]
+        XGB["XGBoost triage-risk model"]
+        ROUTER["Zero-shot specialty router"]
+    end
+
+    RAG["RAG service (Pinecone, optional)"]
     OSM["OpenStreetMap Nominatim"]
 
     UI --> AUTH
     UI --> RLS --> PG
     SC <--> RT
+    RTC <--> RT
+    RTC -->|"call ends"| EF --> PG
     RT --- PG
+    CRON --> PG
     VW -->|"if VITE_VOICE_BACKEND_URL set"| Backend
     VW -->|"else"| WebSpeech["Browser Web Speech API"]
+    Backend -->|"if RAG_SERVICE_URL set"| RAG
+    UI -->|"if VITE_ML_SERVICE_URL set"| MLSvc
+    MLSvc --> PG
     UI --> OSM
 ```
 
@@ -190,6 +259,13 @@ flowchart TD
   straight to Supabase; RLS is the security boundary.
 - **The Express backend is optional** and isolated — it only powers the voice
   assistant and holds the Sarvam/Groq keys server-side.
+- **The ML service and RAG service are separate, optional processes.** Each
+  degrades gracefully when its URL env var is unset: the ML-dependent UI
+  (triage routing, XAI explanations) simply has nothing to call, and the
+  voice assistant answers without RAG grounding.
+- `backend/appointments-server.js` (Mongoose/MongoDB) is **legacy and
+  unused** — appointments now live in `public.appointments` on Supabase; see
+  [`frontend/src/lib/appointments.ts`](frontend/src/lib/appointments.ts).
 
 ---
 
@@ -206,7 +282,14 @@ flowchart TD
 | Graphs | `dagre` | XAI reasoning graph layout |
 | Auth / DB / Realtime | **Supabase** (`@supabase/supabase-js` v2) | Postgres 17 |
 | Crypto | Web Crypto API | AES-256-GCM message bodies |
+| Video calls | **WebRTC** (native browser API) | P2P, Supabase Realtime broadcast for signaling, Google STUN only |
 | Voice backend | **Express 4** (CommonJS) | Sarvam AI + Groq, `multer`, `cors` |
+| Triage risk model | **XGBoost**, FastAPI, Python | trained on 560K+ ED visits; deployed to Railway |
+| Specialty routing | `typeform/distilbert-base-uncased-mnli` (zero-shot) | via `transformers`, HF hub |
+| Consultation AI summary | Supabase Edge Function + **Groq** (`llama-3.1-8b`) | `summarize-consultation`, free tier |
+| RAG grounding | **Pinecone** + `Xenova/multilingual-e5-small` (local embeddings) | feeds voice-assistant chat context |
+| PDF export | `jspdf` + `jspdf-autotable` | consultation record download |
+| Data fetching | `@tanstack/react-query` | appointments, panel, notifications, consultations |
 
 ---
 
@@ -220,7 +303,8 @@ MyHospital/
 │   │   │   ├── Landing/          # public landing (3D stethoscope scene)
 │   │   │   ├── Healthcare/       # login / signup + 3D scene
 │   │   │   ├── Patient/          # patient portal pages + nav
-│   │   │   └── Doctor/           # clinician portal pages + nav
+│   │   │   ├── Doctor/           # clinician portal pages + nav
+│   │   │   └── shared/           # VideoCall.tsx, ConsultationRecord.tsx — used by both portals
 │   │   ├── components/
 │   │   │   ├── DashboardLayout.tsx   # shared portal shell
 │   │   │   ├── SecureChatView.tsx    # the live chat UI
@@ -229,20 +313,43 @@ MyHospital/
 │   │   ├── lib/
 │   │   │   ├── supabaseClient.ts     # configured Supabase client
 │   │   │   ├── useProfile.ts         # signed-in user + role
+│   │   │   ├── formatName.ts         # "Dr. X" display-name helpers
 │   │   │   ├── chat.ts               # Secure Chat data layer
 │   │   │   ├── useSecureChat.ts      # Secure Chat realtime hook
 │   │   │   ├── crypto.ts             # AES-256-GCM envelope
 │   │   │   ├── geocode.ts            # Nominatim wrapper
 │   │   │   ├── notifications.ts      # notifications data layer
-│   │   │   └── priority.ts           # triage priority scale
+│   │   │   ├── priority.ts           # triage priority scale
+│   │   │   ├── appointments.ts       # appointments data layer (public.appointments)
+│   │   │   ├── panel.ts              # doctor priority panel (doctor_patient_panel() RPC)
+│   │   │   ├── triage.ts             # ML /route call → specialty + risk + doctor match
+│   │   │   ├── riskModel.ts          # ML /explain call → SHAP factors for XAI Help
+│   │   │   ├── webrtc.ts             # P2P video call (Realtime signaling)
+│   │   │   ├── useCallTranscript.ts  # live Web Speech transcript during a call
+│   │   │   ├── consultations.ts      # consultation records + summarize-consultation trigger
+│   │   │   ├── consultationDoc.ts    # jsPDF / .txt export of a consultation record
+│   │   │   └── api.ts                # legacy fetch wrapper for backend/appointments-server.js (unused)
 │   │   └── voice-widget/             # self-contained voice assistant
 │   └── vite.config.ts
 │
-└── backend/                      # optional Express voice server
-    ├── server.js
-    ├── config.js                # models + 9 supported languages
-    ├── rate-limit.js
-    └── routes/  (tts.js · stt.js · chat.js)
+├── backend/                      # optional Express voice server
+│   ├── server.js
+│   ├── config.js                 # models + 9 supported languages + RAG_SERVICE_URL
+│   ├── rate-limit.js
+│   ├── routes/  (tts.js · stt.js · chat.js)
+│   ├── appointments-server.js    # legacy Mongoose/MongoDB service — superseded by Supabase, unused
+│   ├── models/Appointment.js     # legacy Mongoose schema
+│   ├── middleware/auth.js        # legacy JWT middleware
+│   └── scripts/  (check-db.js · seed.js)
+│
+├── ml/                            # optional FastAPI triage-risk + specialty-routing service
+│   ├── service/                  # inference API — the deployable unit (Railway)
+│   ├── weights/                  # model.joblib + metrics.json
+│   ├── src/                      # training pipeline (needs database/, gitignored raw data)
+│   └── Dockerfile, railway.toml
+│
+└── rag-system/                    # optional local-embeddings + Pinecone retrieval service
+    └── src/  (index-website.js · server.js · embed.js · retrieve.js · pinecone.js)
 ```
 
 ---
@@ -276,6 +383,32 @@ npm run dev               # http://localhost:8787 (see config.js) — /api/healt
 If you skip the backend, leave `VITE_VOICE_BACKEND_URL` unset and the widget uses
 the browser's speech APIs.
 
+### 3. ML risk service *(optional — triage routing, XAI explanations)*
+
+```bash
+cd ml
+python -m venv .venv && .venv/Scripts/activate   # or source .venv/bin/activate on macOS/Linux
+pip install -r service/requirements.txt
+uvicorn service.main:app --reload                # http://localhost:8000 — /health to check
+```
+
+If you skip it, leave `VITE_ML_SERVICE_URL` unset — specialty routing and
+XAI "why" explanations simply won't be available. See
+[`ml/README.md`](ml/README.md) to also retrain the model.
+
+### 4. RAG system *(optional — grounds the voice assistant in this repo's docs)*
+
+```bash
+cd rag-system
+npm install
+cp .env.example .env      # add a Pinecone API key
+npm run index              # builds the vector index
+npm start                  # http://localhost:8790
+```
+
+Then set `RAG_SERVICE_URL=http://localhost:8790` in `backend/.env`. See
+[`rag-system/README.md`](rag-system/README.md).
+
 ---
 
 ## Environment variables
@@ -288,6 +421,7 @@ the browser's speech APIs.
 | `VITE_SUPABASE_ANON_KEY` | ✅ | Supabase anon / publishable key (safe in the browser; RLS enforces access) |
 | `VITE_CHAT_ENC_KEY` | ✅ for Secure Chat | Base64 256-bit AES key. Generate: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` — same value in every deployment; **never commit it**. Until it's set, messages store as plaintext. |
 | `VITE_VOICE_BACKEND_URL` | ⬜ | URL of the Express voice server. Unset → browser-only voice fallback. |
+| `VITE_ML_SERVICE_URL` | ⬜ | URL of the FastAPI risk service. Unset → defaults to `http://localhost:8000`; unreachable → specialty routing & XAI explanations are unavailable. |
 
 ### `backend/.env`
 
@@ -297,8 +431,20 @@ the browser's speech APIs.
 | `GROQ_API_KEY` | ✅ | Groq — Whisper speech-to-text |
 | `PORT` | ⬜ | Defaults in `config.js` |
 | `SARVAM_TTS_MODEL` / `SARVAM_STT_MODEL` / `SARVAM_CHAT_MODEL` / `GROQ_STT_MODEL` / `DEFAULT_LANG` | ⬜ | Model + language overrides |
+| `RAG_SERVICE_URL` | ⬜ | URL of the RAG system's `/retrieve` endpoint. Unset → chat answers without website-doc grounding. |
+| `RAG_TIMEOUT_MS` | ⬜ | Defaults to `5000` |
+
+### `rag-system/.env`
+
+| Variable | Required | Purpose |
+|---|:--:|---|
+| `PINECONE_API_KEY` | ✅ | Vector store for indexed doc chunks |
 
 > `.env`, `.env.local`, `node_modules`, `dist`, `.vite` are git-ignored.
+>
+> **Supabase Edge Function secrets** (set via the Supabase dashboard/CLI, not
+> a local `.env`): `summarize-consultation` needs its own `GROQ_API_KEY` to
+> call Groq's free `llama-3.1-8b` for consultation summaries.
 
 ---
 
@@ -312,20 +458,58 @@ the browser's speech APIs.
 | `conversations` | One doctor ↔ patient thread — `doctor_id`, `patient_id`, `status`, `subject`, `last_message_at`; unique on `(doctor_id, patient_id)` | participants only; doctor creates |
 | `messages` | `conversation_id`, `sender_id`, `sender_role`, `message_type`, `content` (ciphertext), `client_generated_id`, `metadata`, soft-delete via `deleted_at` | participants read; sender inserts / edits |
 | `message_receipts` | Per-user `delivered_at` / `read_at` | own receipts only |
-| `notifications` | In-app notifications with an urgency scale | own rows only |
+| `notifications` | Real, trigger-fed notification feed — `type`, `read_at`, `link`, `metadata`, `actor_id`, urgency scale | own rows only |
+| `appointments` | Full lifecycle `requested → confirmed/declined → completed/cancelled/no_show`; `appointment_type` enum, `mode` (`in_person`/`video`), per-row `meeting_room` slug, denormalized `doctor_name`/`patient_name` | both parties |
+| `doctors` | One profile row per doctor user — `specialty` enum, workload | read by patients/doctors as needed |
+| `patients` | `priority_bracket` / `priority_score` (0–100) / `priority_updated_at` / `latest_complaint`, `chronic_conditions`; unique on `user_id` | doctor-scoped via panel RPC |
+| `triage_assessments` | Persisted result of an ML `/route` call — specialty, risk score, need bracket, `assigned_doctor_id` / `matched_doctor_ids` | doctors, by specialty match |
+| `consultation_records` | One row per video visit — `transcript` text, `summary` jsonb, `summary_text`, `status` (`draft`/`final`), `summary_status` (`pending`/`ready`/`failed`/`skipped`) | both parties read; doctor inserts/updates |
 
-**Enums:** `user_role`, `conversation_status`, `participant_role`, `message_type`
+**Enums:** `user_role`, `conversation_status`, `participant_role`, `message_type`,
+`appointment_type`, plus the specialty/status enums under `doctors` /
+`triage_assessments`.
 
 **Functions / triggers:**
-`is_conversation_member(uuid)`, `current_user_role()`, `shares_conversation_with(uuid)`
-(all `security definer` to avoid RLS recursion), and `bump_conversation()` — an
-`after insert on messages` trigger that keeps `conversations.last_message_at` fresh.
+- `is_conversation_member(uuid)`, `current_user_role()`, `shares_conversation_with(uuid)`
+  (all `security definer` to avoid RLS recursion), and `bump_conversation()` — an
+  `after insert on messages` trigger that keeps `conversations.last_message_at` fresh.
+- `appointments_denormalize` — keeps `appointments.doctor_name`/`patient_name` in sync.
+- `notify_user()` (`security definer`), fired by `appointments_notify`,
+  `vitals_logs_notify` (via `vitals_severity()`), `messages_notify`,
+  `conversations_notify`, `users_welcome_notify` — the single write path for
+  every row in `notifications`.
+- `triage_shift_patient()` — `before insert` on `triage_assessments`. Resolves
+  the owning doctor (`assigned_doctor_id` ?? best-matched doctor ?? least-loaded
+  active doctor in the routed specialty), writes it back, and upserts `patients`
+  with the normalised urgency (`risk_score * 20`, clamped 0–100) — the engine
+  behind the doctor priority panel.
+- `doctor_patient_panel()` — `security definer` RPC: the caller's patients,
+  sorted `priority_rank(bracket)` then score desc, with next-appointment lateral
+  join. Doctor RLS on `triage_assessments` is by **specialty match**, not
+  assignment, which is why this RPC exists instead of a plain RLS-scoped select.
+- `priority_rank(text)` — `critical`=0 … `stable`=3.
+
+**Cron (`pg_cron`):** `appointment-reminders`, every 5 minutes, calls
+`run_appointment_reminders()` — 15-minute-out reminders + an overdue nudge.
+
+**Edge Function:** `summarize-consultation` (`verify_jwt: true`) — loads a
+`consultation_records` row under the caller's JWT, calls Groq's free
+`llama-3.1-8b-instant` (OpenAI-compatible `/chat/completions`, JSON mode), and
+writes the structured summary back; soft-fails to `summary_status='failed'` if
+`GROQ_API_KEY` isn't set as a function secret. Invoked from
+[`frontend/src/lib/consultations.ts`](frontend/src/lib/consultations.ts) when a
+doctor ends a call.
+
+**Dropped:** the `patient_profile_view` view (superseded by direct table access
+under RLS).
 
 ### Realtime
 
-The `supabase_realtime` publication includes `messages` and `message_receipts`.
-Realtime honours RLS, so each client only receives rows for its own
-conversations. Broadcast/Presence channels are `sc:inbox` and `sc:conv:<id>`.
+The `supabase_realtime` publication includes `messages`, `message_receipts`,
+`appointments`, `patients`, and `consultation_records`. Realtime honours RLS,
+so each client only receives rows it's allowed to see. Channels:
+`sc:inbox` / `sc:conv:<id>` (Secure Chat), `rtc:<room>` (WebRTC signaling
+broadcast for video calls).
 
 ### Applied migrations
 
@@ -333,6 +517,9 @@ conversations. Broadcast/Presence channels are `sc:inbox` and `sc:conv:<id>`.
 |---|---|
 | `conversations_fk_to_public_users` | Repointed `doctor_id` / `patient_id` FKs from `auth.users` → `public.users` so PostgREST can embed the peer's name & role in one query |
 | `users_visibility_for_secure_chat` | Added `current_user_role()` + `shares_conversation_with()` helpers and two SELECT policies: chat partners can read each other's profile; doctors can browse patient rows to start a thread |
+| *(appointments/notifications migration)* | Moved appointments off the standalone Mongo/Express service into `public.appointments`; extended `notifications`; added the notify triggers + `appointment-reminders` cron; dropped `patient_profile_view` |
+| `priority_patient_panel`, `patients_user_id_unique_full`, `triage_shift_single_scale` | Added priority columns to `patients`, `triage_shift_patient()` trigger, `doctor_patient_panel()` RPC, `priority_rank()` |
+| *(consultation records migration)* | Added `consultation_records` + RLS, enabled it in `supabase_realtime` |
 
 ### Trying Secure Chat locally
 
@@ -368,8 +555,10 @@ encryption protects at-rest storage, not against a malicious authenticated user.
 - [ ] **Read receipts in the UI** — `message_receipts` is wired on the write side; surface ticks in `SecureChatView`.
 - [ ] **Attachments** — `message_type` already supports `image` / `file`; add Supabase Storage + signed URLs.
 - [ ] **True E2EE option** — per-user X25519 keypairs, sealed-box message bodies.
-- [ ] **Replace mocked dashboard data** — Home / Vitals / Records / Appointments currently render illustrative fixtures; back them with real tables.
-- [ ] **Push notifications** for new messages when the app is backgrounded.
+- [x] **Replace mocked appointments / notifications / patient panel** — `appointments`, `notifications`, and the doctor's Managing Patients queue are now backed by real Supabase tables and RPCs, not fixtures.
+- [x] **Video consultations with AI-summarised records** — WebRTC calls, live transcript, `summarize-consultation` edge function, PDF/TXT export.
+- [ ] **Replace remaining mocked dashboard data** — Home and Vitals still render illustrative fixtures; back them with real tables.
+- [ ] **Push notifications** for new messages / appointment reminders when the app is backgrounded (in-app `notifications` feed + email-style reminders already exist; native/browser push does not).
 
 ---
 
@@ -387,8 +576,26 @@ encryption protects at-rest storage, not against a malicious authenticated user.
 
 | Command | Description |
 |---|---|
-| `npm run dev` | `node --watch server.js` |
+| `npm run dev` | `node --watch server.js` — voice assistant server |
 | `npm start` | `node server.js` |
+| `npm run appt:dev` / `npm run appt` | Legacy Mongoose appointments server — unused; appointments live in Supabase |
+| `npm run db:check` / `npm run db:seed` | Legacy Mongo helpers for the above |
+
+### `ml/`
+
+| Command | Description |
+|---|---|
+| `uvicorn service.main:app --reload` | Run the inference API locally |
+| `python src/discover_schema.py` / `prepare_data.py` / `train.py` / `evaluate.py` | Training pipeline — see [`ml/README.md`](ml/README.md) |
+| `docker build -t risk-service . && docker run -p 8000:8000 risk-service` | Build & smoke-test the deploy image |
+
+### `rag-system/`
+
+| Command | Description |
+|---|---|
+| `npm run index` | (Re)build the Pinecone index from the repo's docs/source |
+| `npm start` | Serve `/retrieve` for the backend to call |
+| `npm run dev` | `node --watch src/server.js` |
 
 ---
 
