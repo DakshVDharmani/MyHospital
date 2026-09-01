@@ -4,6 +4,7 @@ dist
 .vscode
 .env
 .env.local
+rag-system/.cache/
 
 # Python
 __pycache__/
