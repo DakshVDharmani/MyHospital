@@ -15,6 +15,8 @@ import VideoCall from "./pages/shared/VideoCall";
 import ConsultationRecordPage from "./pages/shared/ConsultationRecord";
 import { VoiceWidget } from "./voice-widget/VoiceWidget";
 import { RouteTransition } from "./components/RouteTransition";
+import AdminLogin from "./pages/Admin/AdminLogin";
+import AdminDashboard from "./pages/Admin/AdminDashboard";
 
 function App() {
   return (
@@ -25,6 +27,8 @@ function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<HealthcareAuthPage />} />
         <Route path="/signup" element={<HealthcareAuthPage />} />
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin" element={<AdminDashboard />} />
 
         <Route path="/patient/home" element={<PatientHome />} />
         <Route path="/patient/chat" element={<PatientSecureChat />} />
