@@ -73,11 +73,14 @@ export async function ensureDailyVitalsReminder(patientId: string, rows: VitalsR
   if (rows.some((row) => row.log_date === logDate)) return;
 
   const { start, end } = localDayBounds(today);
+  // The 06:00 IST cron may already have posted a `vitals_daily_reminder`
+  // today — treat either kind as "already nudged" so we don't double up
+  // (and don't fire a second SMS).
   const { data, error: lookupError } = await supabase
     .from("notifications")
     .select("notif_id")
     .eq("id", patientId)
-    .eq("type", "vitals_missing")
+    .in("type", ["vitals_missing", "vitals_daily_reminder"])
     .gte("created_at", start)
     .lt("created_at", end)
     .limit(1);

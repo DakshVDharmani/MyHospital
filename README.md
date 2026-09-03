@@ -91,7 +91,11 @@ Gujarati).
 ### 🌍 Address & geolocation
 
 Free-text address → coordinates via OpenStreetMap **Nominatim**, rendered on a
-**Leaflet** map — no API key, no vendor lock-in.
+**Leaflet** map — no API key, no vendor lock-in. The same profile panel takes a
+**mobile number** (`+91`); with the SMS bridge enabled server-side, every
+in-app notification is mirrored to that number as a text, plus a 06:00 IST
+daily "log your vitals" reminder. Ships **disabled** (SMS is billable) — see
+[Supabase setup](#supabase-setup).
 
 ---
 
@@ -443,8 +447,15 @@ Then set `RAG_SERVICE_URL=http://localhost:8790` in `backend/.env`. See
 > `.env`, `.env.local`, `node_modules`, `dist`, `.vite` are git-ignored.
 >
 > **Supabase Edge Function secrets** (set via the Supabase dashboard/CLI, not
-> a local `.env`): `summarize-consultation` needs its own `GROQ_API_KEY` to
-> call Groq's free `llama-3.1-8b` for consultation summaries.
+> a local `.env`):
+> - `summarize-consultation` needs its own `GROQ_API_KEY` to call Groq's free
+>   `llama-3.1-8b` for consultation summaries.
+> - `send-sms` (the notification → SMS bridge, **shipped disabled** — see
+>   Supabase setup) reads, when you enable it: `SMS_PROVIDER` (`fast2sms` \|
+>   `twilio`), then either `FAST2SMS_API_KEY`, or `TWILIO_ACCOUNT_SID` +
+>   `TWILIO_AUTH_TOKEN` + `TWILIO_FROM_NUMBER`. With none set it no-ops and
+>   logs. Optional `SMS_SHARED_SECRET` — when set, the DB trigger must present
+>   it as `x-sms-secret`. **No SMS keys live in the repo.**
 
 ---
 
@@ -454,7 +465,7 @@ Then set `RAG_SERVICE_URL=http://localhost:8790` in `backend/.env`. See
 
 | Table | Purpose | RLS |
 |---|---|---|
-| `users` | Profile row per auth user — `name`, `email`, `role` (`doctor` \| `patient`), `address`, `latitude`, `longitude` | own row; **chat partners** may read each other; **doctors** may list patients |
+| `users` | Profile row per auth user — `name`, `email`, `role` (`doctor` \| `patient`), `address`, `latitude`, `longitude`, `phone` (patient mobile for SMS alerts, +91 assumed) | own row; **chat partners** may read each other; **doctors** may list patients |
 | `conversations` | One doctor ↔ patient thread — `doctor_id`, `patient_id`, `status`, `subject`, `last_message_at`; unique on `(doctor_id, patient_id)` | participants only; doctor creates |
 | `messages` | `conversation_id`, `sender_id`, `sender_role`, `message_type`, `content` (ciphertext), `client_generated_id`, `metadata`, soft-delete via `deleted_at` | participants read; sender inserts / edits |
 | `message_receipts` | Per-user `delivered_at` / `read_at` | own receipts only |
@@ -488,9 +499,20 @@ Then set `RAG_SERVICE_URL=http://localhost:8790` in `backend/.env`. See
   join. Doctor RLS on `triage_assessments` is by **specialty match**, not
   assignment, which is why this RPC exists instead of a plain RLS-scoped select.
 - `priority_rank(text)` — `critical`=0 … `stable`=3.
+- `notifications_send_sms()` — `after insert on notifications` trigger that
+  mirrors each **patient** notification (when `users.phone` is set) to SMS via
+  the `send-sms` edge function over `pg_net`. **Shipped disabled** (`alter
+  table … disable trigger notifications_send_sms`) because SMS is billable
+  per message; re-enable the trigger to switch it on.
+- `run_daily_vitals_reminder()` — inserts a `vitals_daily_reminder`
+  notification for every patient (deduped per IST day); the in-app nudge is
+  always on, the SMS copy follows only when the trigger above is enabled.
 
-**Cron (`pg_cron`):** `appointment-reminders`, every 5 minutes, calls
-`run_appointment_reminders()` — 15-minute-out reminders + an overdue nudge.
+**Cron (`pg_cron`):**
+- `appointment-reminders`, every 5 minutes, calls `run_appointment_reminders()`
+  — 15-minute-out reminders + an overdue nudge.
+- `daily-vitals-reminder`, `30 0 * * *` UTC (**06:00 Asia/Kolkata**), calls
+  `run_daily_vitals_reminder()`.
 
 **Edge Function:** `summarize-consultation` (`verify_jwt: true`) — loads a
 `consultation_records` row under the caller's JWT, calls Groq's free
@@ -499,6 +521,13 @@ writes the structured summary back; soft-fails to `summary_status='failed'` if
 `GROQ_API_KEY` isn't set as a function secret. Invoked from
 [`frontend/src/lib/consultations.ts`](frontend/src/lib/consultations.ts) when a
 doctor ends a call.
+
+**Edge Function:** `send-sms` (`verify_jwt: false`, shared-secret header) —
+normalises a number to `+91XXXXXXXXXX`, sends one text via Fast2SMS or Twilio
+(runtime-selected via `SMS_PROVIDER`), and no-ops with a log line when no
+provider secret is set. Called only by the `notifications_send_sms` trigger,
+which is disabled by default — so this stays dormant until you both add a
+provider key and enable the trigger.
 
 **Dropped:** the `patient_profile_view` view (superseded by direct table access
 under RLS).
@@ -520,6 +549,7 @@ broadcast for video calls).
 | *(appointments/notifications migration)* | Moved appointments off the standalone Mongo/Express service into `public.appointments`; extended `notifications`; added the notify triggers + `appointment-reminders` cron; dropped `patient_profile_view` |
 | `priority_patient_panel`, `patients_user_id_unique_full`, `triage_shift_single_scale` | Added priority columns to `patients`, `triage_shift_patient()` trigger, `doctor_patient_panel()` RPC, `priority_rank()` |
 | *(consultation records migration)* | Added `consultation_records` + RLS, enabled it in `supabase_realtime` |
+| *(notification SMS migration)* | Added `users.phone`; `notifications_send_sms` trigger + `send-sms` edge function (notification → SMS via Fast2SMS/Twilio); `run_daily_vitals_reminder()` + `daily-vitals-reminder` cron at 06:00 IST. The SMS trigger is **left disabled** to avoid per-message cost |
 
 ### Trying Secure Chat locally
 

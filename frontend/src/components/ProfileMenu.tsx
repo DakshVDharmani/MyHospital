@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { MapPin, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { MapPin, Phone, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useProfile } from '../lib/useProfile';
 import { geocodeAddress, searchAddresses, type GeocodeResult } from '../lib/geocode';
 import { displayDoctorName, firstNameOf } from '../lib/formatName';
@@ -20,6 +20,9 @@ export function ProfileMenu() {
   const [addressInput, setAddressInput] = useState('');
   const [status, setStatus] = useState<'idle' | 'locating' | 'saved' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [phoneInput, setPhoneInput] = useState('');
+  const [phoneStatus, setPhoneStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [phoneErr, setPhoneErr] = useState('');
   const [suggestions, setSuggestions] = useState<GeocodeResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(-1);
@@ -33,6 +36,29 @@ export function ProfileMenu() {
   useEffect(() => {
     setAddressInput(profile.address ?? '');
   }, [profile.address]);
+
+  useEffect(() => {
+    setPhoneInput(profile.phone ?? '');
+  }, [profile.phone]);
+
+  const handleSavePhone = async () => {
+    const digits = phoneInput.replace(/\D+/g, '').replace(/^91(?=\d{10}$)/, '');
+    if (digits && !/^[6-9]\d{9}$/.test(digits)) {
+      setPhoneStatus('error');
+      setPhoneErr('Enter a 10-digit Indian mobile number.');
+      return;
+    }
+    setPhoneStatus('saving');
+    setPhoneErr('');
+    try {
+      await profile.savePhone(digits);
+      setPhoneInput(digits);
+      setPhoneStatus('saved');
+    } catch (err) {
+      setPhoneStatus('error');
+      setPhoneErr(err instanceof Error ? err.message : 'Could not save your number.');
+    }
+  };
 
   // Debounced address-suggestion lookup — cancels the previous in-flight
   // request on every keystroke so responses can't race and land out of order.
@@ -186,6 +212,16 @@ export function ProfileMenu() {
           transition: border-color 0.2s ease;
         }
         .profile-menu-input:focus { border-color: var(--teal, #0E9C8F); }
+        .profile-menu-section-gap { margin-top: 16px; }
+        .profile-menu-phone-wrap { display: flex; align-items: stretch; flex: 1; min-width: 0; }
+        .profile-menu-phone-prefix {
+          display: flex; align-items: center; padding: 0 9px;
+          border: 1.5px solid var(--line, #D6E8E3); border-right: none;
+          border-radius: 9px 0 0 9px; background: var(--field-bg, #F2F8F7);
+          font-size: 12.5px; font-weight: 800; color: var(--navy-soft, #4C6B78);
+        }
+        .profile-menu-phone-wrap .profile-menu-input { border-radius: 0 9px 9px 0; }
+        .profile-menu-hint { font-size: 10.5px; font-weight: 600; color: var(--ink-soft, #5C7680); margin-top: 6px; }
 
         .profile-menu-suggestions {
           position: absolute; top: calc(100% + 6px); left: 0; right: 0;
@@ -327,6 +363,52 @@ export function ProfileMenu() {
             {profile.latitude != null && profile.longitude != null && (
               <div className="profile-menu-map-wrap">
                 <LocationMap latitude={profile.latitude} longitude={profile.longitude} label={profile.address ?? undefined} />
+              </div>
+            )}
+
+            {profile.id && (
+              <div className="profile-menu-section-gap">
+                <div className="profile-menu-label"><Phone size={12} /> Mobile for SMS alerts</div>
+                <div className="profile-menu-input-row">
+                  <div className="profile-menu-phone-wrap">
+                    <span className="profile-menu-phone-prefix">+91</span>
+                    <input
+                      className="profile-menu-input"
+                      placeholder="10-digit mobile number"
+                      value={phoneInput}
+                      inputMode="numeric"
+                      autoComplete="tel-national"
+                      maxLength={14}
+                      onChange={(e) => {
+                        setPhoneInput(e.target.value);
+                        if (phoneStatus !== 'idle') setPhoneStatus('idle');
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSavePhone();
+                      }}
+                    />
+                  </div>
+                  <button
+                    className="profile-menu-save"
+                    onClick={handleSavePhone}
+                    disabled={phoneStatus === 'saving'}
+                  >
+                    {phoneStatus === 'saving' ? <Loader2 size={14} className="profile-menu-spin" /> : 'Save'}
+                  </button>
+                </div>
+                {phoneStatus === 'saved' && (
+                  <div className="profile-menu-status profile-menu-status-ok">
+                    <CheckCircle2 size={13} /> {phoneInput ? 'Number saved.' : 'Number removed.'}
+                  </div>
+                )}
+                {phoneStatus === 'error' && (
+                  <div className="profile-menu-status profile-menu-status-err"><AlertCircle size={13} /> {phoneErr}</div>
+                )}
+                {phoneStatus !== 'error' && phoneStatus !== 'saved' && (
+                  <div className="profile-menu-hint">
+                    When SMS alerts are enabled, every notification is also texted here. Leave blank to opt out.
+                  </div>
+                )}
               </div>
             )}
           </div>
