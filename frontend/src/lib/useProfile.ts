@@ -9,12 +9,16 @@ export interface Profile {
   address: string | null;
   latitude: number | null;
   longitude: number | null;
+  /** National mobile number (no country code); +91 is assumed when texting. */
+  phone: string | null;
   loading: boolean;
 }
 
 export interface ProfileState extends Profile {
   /** Persists a geocoded address to the user's row and reflects it locally. */
   saveAddress: (address: string, latitude: number, longitude: number) => Promise<void>;
+  /** Persists the patient's mobile number (digits only, or '' to clear). */
+  savePhone: (phone: string) => Promise<void>;
 }
 
 const FALLBACK: Profile = {
@@ -25,6 +29,7 @@ const FALLBACK: Profile = {
   address: null,
   latitude: null,
   longitude: null,
+  phone: null,
   loading: true,
 };
 
@@ -49,7 +54,7 @@ export function useProfile(): ProfileState {
 
       const { data: row } = await supabase
         .from('users')
-        .select('name, email, role, address, latitude, longitude')
+        .select('name, email, role, address, latitude, longitude, phone')
         .eq('id', user.id)
         .single();
       if (cancelled) return;
@@ -62,6 +67,7 @@ export function useProfile(): ProfileState {
         address: row?.address ?? null,
         latitude: row?.latitude ?? null,
         longitude: row?.longitude ?? null,
+        phone: row?.phone ?? null,
         loading: false,
       });
     })();
@@ -81,5 +87,17 @@ export function useProfile(): ProfileState {
     [profile.id]
   );
 
-  return { ...profile, saveAddress };
+  const savePhone = useCallback(
+    async (phone: string) => {
+      if (!profile.id) throw new Error('Not signed in.');
+      const digits = phone.replace(/\D+/g, '');
+      const next = digits ? digits : null;
+      const { error } = await supabase.from('users').update({ phone: next }).eq('id', profile.id);
+      if (error) throw error;
+      setProfile((p) => ({ ...p, phone: next }));
+    },
+    [profile.id]
+  );
+
+  return { ...profile, saveAddress, savePhone };
 }
