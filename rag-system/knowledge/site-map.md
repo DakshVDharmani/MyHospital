@@ -1,4 +1,4 @@
-# MyHospital website knowledge
+# MyHospital website knowledge 
 
 MyHospital is a hospital collaboration website with separate patient and doctor experiences. The floating voice widget is available throughout the React application and can answer questions by voice.
 
