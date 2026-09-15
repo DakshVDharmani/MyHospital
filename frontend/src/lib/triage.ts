@@ -34,6 +34,78 @@ export interface TriageOutcome extends RouteResult {
   doctors: MatchedDoctor[];
 }
 
+export interface RankedDoctor extends MatchedDoctor {
+  /** great-circle distance from the patient, or null if either side lacks coordinates */
+  distanceKm: number | null;
+  /** current_load / weekly_capacity, 0-1+ (lower is less busy) */
+  loadRatio: number;
+}
+
+export interface RoutedMatch extends TriageOutcome {
+  /** doctors re-ranked by distance then load; empty if none matched */
+  ranked: RankedDoctor[];
+  /** ranked[0], or null if no doctor could be matched */
+  best: RankedDoctor | null;
+}
+
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * Full auto-routing flow for booking: classify the complaint, match doctors
+ * of the right specialty/urgency bracket, then rank them by how close they
+ * are to the patient (when both sides have saved coordinates) and how light
+ * their current load is — so the patient never has to pick a doctor by name.
+ */
+export async function findBestDoctor(
+  complaint: string,
+  opts: Parameters<typeof routePatient>[1] & { patientLat?: number | null; patientLng?: number | null } = {},
+): Promise<RoutedMatch> {
+  const { patientLat = null, patientLng = null, ...routeOpts } = opts;
+  const outcome = await routePatient(complaint, routeOpts);
+
+  let geoById = new Map<string, { latitude: number | null; longitude: number | null }>();
+  if (outcome.doctors.length > 0) {
+    const { data: geo } = await supabase
+      .from('users')
+      .select('id, latitude, longitude')
+      .in(
+        'id',
+        outcome.doctors.map((d) => d.user_id),
+      );
+    geoById = new Map((geo ?? []).map((g: any) => [g.id, g]));
+  }
+
+  const ranked: RankedDoctor[] = outcome.doctors
+    .map((d) => {
+      const g = geoById.get(d.user_id);
+      const distanceKm =
+        patientLat != null && patientLng != null && g?.latitude != null && g?.longitude != null
+          ? haversineKm(patientLat, patientLng, g.latitude, g.longitude)
+          : null;
+      const loadRatio = d.weekly_capacity > 0 ? d.current_load / d.weekly_capacity : 0;
+      return { ...d, distanceKm, loadRatio };
+    })
+    // Nearest wins when the gap is meaningful (>2km); otherwise the less-busy
+    // doctor wins — keeps a slightly-farther-but-free doctor from losing to a
+    // marginally-closer, fully-booked one.
+    .sort((a, b) => {
+      if (a.distanceKm != null && b.distanceKm != null && Math.abs(a.distanceKm - b.distanceKm) > 2) {
+        return a.distanceKm - b.distanceKm;
+      }
+      return a.loadRatio - b.loadRatio;
+    });
+
+  return { ...outcome, ranked, best: ranked[0] ?? null };
+}
+
 /**
  * Full patient-routing flow:
  *   1. POST /route on the ML service — pre-trained zero-shot classifier picks

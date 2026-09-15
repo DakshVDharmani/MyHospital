@@ -1,5 +1,4 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import LandingPage from "./pages/Landing/LandingPage";
 import HealthcareAuthPage from "./pages/Healthcare/AuthPage";
 import PatientHome from "./pages/Patient/PatientHome";
 import PatientSecureChat from "./pages/Patient/SecureChat";
@@ -24,7 +23,7 @@ function App() {
       <RouteTransition>
       <VoiceWidget backendUrl={import.meta.env.VITE_VOICE_BACKEND_URL} />
       <Routes>
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<HealthcareAuthPage />} />
         <Route path="/login" element={<HealthcareAuthPage />} />
         <Route path="/signup" element={<HealthcareAuthPage />} />
         <Route path="/admin/login" element={<AdminLogin />} />

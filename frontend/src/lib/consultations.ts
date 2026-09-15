@@ -8,9 +8,18 @@ import { supabase } from './supabaseClient';
  *  `transcript`   : the complete meeting as plain text, one line per utterance
  *                   ("HH:MM  Speaker: ...") — captured live in the call.
  *  `summary`      : an AI-structured clinical summary + the doctor's advice,
- *                   produced by the `summarize-consultation` edge function.
+ *                   produced by the backend's /api/consultation-summary route
+ *                   (same Sarvam model as the voice assistant).
  *  Surfaced on the patient's Medical Records page; downloadable as .txt / .pdf.
  * ==========================================================================*/
+
+// Same backend as server.js (PORT 8787) — see admin.ts for the precedence
+// rationale (prefer an explicit override, fall back to the older API URL var).
+const SUMMARY_API_BASE = (
+  (import.meta.env.VITE_VOICE_BACKEND_URL as string | undefined) ??
+  (import.meta.env.VITE_API_URL as string | undefined) ??
+  'http://localhost:8787'
+).replace(/\/$/, '');
 
 export type ConsultationStatus = 'draft' | 'final';
 export type SummaryStatus = 'pending' | 'ready' | 'failed' | 'skipped';
@@ -235,23 +244,39 @@ export async function updateConsultationRecord(
 }
 
 /**
- * Kicks the `summarize-consultation` edge function, which reads the record's
- * transcript, builds the structured summary with Claude, and writes it back.
- * Resolves to the resulting summary status; never throws for a "soft" failure
- * (the transcript is already safely saved either way).
+ * Reads the record's transcript, asks the backend's /api/consultation-summary
+ * route to build a structured summary with the Sarvam chat model, and writes
+ * the result back onto the record. Resolves to the resulting summary status;
+ * never throws for a "soft" failure (the transcript is already safely saved
+ * either way).
  */
 export async function summarizeConsultation(
   recordId: string,
 ): Promise<{ summaryStatus: SummaryStatus; error?: string }> {
   try {
-    const { data, error } = await supabase.functions.invoke('summarize-consultation', {
-      body: { recordId },
+    const record = await fetchConsultationRecord(recordId);
+    if (!record) return { summaryStatus: 'failed', error: 'Record not found.' };
+    if (!record.transcript.trim()) return { summaryStatus: 'skipped' };
+
+    const res = await fetch(`${SUMMARY_API_BASE}/api/consultation-summary`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcript: record.transcript }),
     });
-    if (error) return { summaryStatus: 'failed', error: error.message };
-    return {
-      summaryStatus: (data?.summary_status as SummaryStatus) ?? 'failed',
-      error: data?.error,
-    };
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { summaryStatus: 'failed', error: data?.error || `Summary service returned ${res.status}` };
+
+    const summaryStatus = (data?.summary_status as SummaryStatus) ?? 'failed';
+    if (summaryStatus === 'ready' && data?.summary) {
+      await updateConsultationRecord(recordId, {
+        summary: { ...EMPTY_SUMMARY, ...data.summary },
+        summaryText: data.summary_text ?? '',
+        summaryStatus: 'ready',
+      });
+    } else {
+      await updateConsultationRecord(recordId, { summaryStatus }).catch(() => {});
+    }
+    return { summaryStatus, error: data?.error };
   } catch (e) {
     return { summaryStatus: 'failed', error: (e as Error).message };
   }

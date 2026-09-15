@@ -231,6 +231,41 @@
   box-shadow: inset 0 1px 3px rgba(14, 156, 143, 0.16);
 }
 
+/* ---------------- Auto-routing (doctor picker replacement) ---------------- */
+.ax-route-hint {
+  display: flex; align-items: center; gap: 7px;
+  border: 1.5px dashed #DCEBE8; border-radius: 11px; padding: 10px 12px;
+  font-size: 12px; font-weight: 600; color: #5C7680; background: #F8FBFA;
+}
+.ax-route-hint-err { border-color: #F0C9C6; background: #FDECEB; color: #C23B34; justify-content: space-between; flex-wrap: wrap; }
+.ax-spin-ic { animation: ax-spin 0.9s linear infinite; flex-shrink: 0; }
+@keyframes ax-spin { to { transform: rotate(360deg); } }
+
+.ax-route-card {
+  position: relative;
+  display: flex; align-items: flex-start; gap: 11px;
+  border: 1.5px solid rgba(14, 156, 143, 0.3); border-radius: 13px;
+  padding: 12px 34px 12px 12px;
+  background: linear-gradient(135deg, rgba(14, 156, 143, 0.08), rgba(44, 127, 242, 0.04));
+  animation: ax-rise 0.28s cubic-bezier(.22,.61,.36,1) both;
+}
+.ax-route-body { min-width: 0; flex: 1; }
+.ax-route-name { font-size: 13.5px; font-weight: 800; color: #0B2B3C; line-height: 1.25; }
+.ax-route-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.ax-route-note { font-size: 11px; color: #5C7680; font-weight: 500; margin: 6px 0 0; line-height: 1.4; }
+.ax-route-retry {
+  display: inline-flex; align-items: center; gap: 5px;
+  border: 1.5px solid #DCEBE8; background: #fff; color: #0B7A70;
+  border-radius: 8px; padding: 4px 8px; font-size: 10.5px; font-weight: 800;
+  cursor: pointer; transition: border-color 0.16s, background 0.16s;
+  flex-shrink: 0;
+}
+.ax-route-retry:hover { border-color: #0E9C8F; background: #F2F8F7; }
+.ax-route-retry-corner {
+  position: absolute; top: 10px; right: 10px; padding: 5px;
+  border-radius: 50%; width: 24px; height: 24px; justify-content: center;
+}
+
 /* ---------------- Buttons ---------------- */
 .ax-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;

@@ -38,6 +38,8 @@ export function useVoiceAssistant(opts: VoiceAssistantOptions = {}) {
   const [reply, setReply] = useState("");
   const [error, setError] = useState("");
   const [listening, setListening] = useState(false);
+  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const busyRef = useRef(false);
 
   const langRef = useRef(lang);
   const autoLangRef = useRef(autoLang);
@@ -130,11 +132,15 @@ export function useVoiceAssistant(opts: VoiceAssistantOptions = {}) {
       const code = optsOverride?.lang || langRef.current;
       const backend = backendRef.current;
       setTranscript(message);
+      setError("");
       onTranscript?.(message);
+      setMessages((prev) => [...prev, { role: "user", content: message }]);
 
       if (!backend) {
         const text = fallbackReply(message, code);
+        historyRef.current = [...historyRef.current, { role: "user", content: message }, { role: "assistant", content: text }];
         setReply(text);
+        setMessages((prev) => [...prev, { role: "assistant", content: text }]);
         onReply?.(text);
         speak(text, code);
         return;
@@ -160,6 +166,7 @@ export function useVoiceAssistant(opts: VoiceAssistantOptions = {}) {
         }
         historyRef.current = [...historyRef.current, { role: "user", content: message }, { role: "assistant", content: text }];
         setReply(text);
+        setMessages((prev) => [...prev, { role: "assistant", content: text }]);
         onReply?.(text);
         setSafeStatus("idle");
         speak(text, code);
@@ -347,10 +354,15 @@ export function useVoiceAssistant(opts: VoiceAssistantOptions = {}) {
   }, [stopListening, startSarvamRecording, startWebSpeechRecognition]);
 
   const sendText = useCallback(
-    (text: string) => {
-      if (!text.trim()) return;
+    async (text: string) => {
+      if (!text.trim() || busyRef.current) return;
+      busyRef.current = true;
       setSafeStatus("thinking");
-      sendToAssistant(text.trim());
+      try {
+        await sendToAssistant(text.trim());
+      } finally {
+        busyRef.current = false;
+      }
     },
     [sendToAssistant]
   );
@@ -386,6 +398,7 @@ export function useVoiceAssistant(opts: VoiceAssistantOptions = {}) {
     reply,
     error,
     listening,
+    messages,
     languages: LANGUAGES,
     startListening,
     stopListening,

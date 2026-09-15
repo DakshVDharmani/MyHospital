@@ -1,6 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import {
   Video,
   MapPin,
@@ -10,11 +9,17 @@ import {
   CalendarHeart,
   CalendarClock,
   ArrowRight,
+  Sparkles,
+  Stethoscope,
+  Gauge,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react';
 import { DashboardLayout } from '../../components/DashboardLayout';
 import { AppointmentsCalendar } from '../../components/AppointmentsCalendar';
 import { useProfile } from '../../lib/useProfile';
 import { listDoctors } from '../../lib/chat';
+import { findBestDoctor, type RankedDoctor } from '../../lib/triage';
 import {
   useAppointments,
   useAppointmentsRealtime,
@@ -28,6 +33,15 @@ import {
 import { patientNav } from './nav';
 import '../../components/dashboard.css';
 import '../../components/appointments.css';
+
+type RouteState = 'idle' | 'loading' | 'done' | 'error';
+
+const loadTier = (ratio: number): { label: string; cls: string } =>
+  ratio < 0.5
+    ? { label: 'Light load', cls: 'ax-pill-teal' }
+    : ratio < 0.85
+      ? { label: 'Moderate load', cls: 'ax-pill-amber' }
+      : { label: 'Busy', cls: 'ax-pill-red' };
 
 const STATUS_PILL: Record<Appointment['status'], string> = {
   requested: 'ax-pill-amber',
@@ -47,16 +61,14 @@ function whenLabel(a: { start: string }) {
 }
 
 export default function PatientAppointments() {
-  const { id, name, loading } = useProfile();
+  const { id, name, latitude, longitude, loading } = useProfile();
   const navigate = useNavigate();
   const appts = useAppointments();
   useAppointmentsRealtime();
   const requestMut = useRequestAppointment();
   const cancelMut = useCancelAppointment();
-  const doctors = useQuery({ queryKey: ['doctors'], queryFn: listDoctors, staleTime: 5 * 60_000 });
 
   const [form, setForm] = useState({
-    doctorId: '',
     title: '',
     reason: '',
     type: 'general_consultation' as ApptType,
@@ -65,6 +77,82 @@ export default function PatientAppointments() {
     time: '',
     window: '',
   });
+
+  // ---- Auto-routing: the patient never picks a doctor by name. What they
+  // type in "Reason" is classified by the triage model, matched against
+  // doctors of the right specialty/urgency, then ranked by distance + how
+  // light their current load is. -----------------------------------------
+  const [routeState, setRouteState] = useState<RouteState>('idle');
+  const [routed, setRouted] = useState<RankedDoctor | null>(null);
+  const [routeMeta, setRouteMeta] = useState<{ specialty: string; fallback: boolean } | null>(null);
+  const [routeError, setRouteError] = useState<string | null>(null);
+  const routeSeq = useRef(0);
+
+  const runRouting = useMemo(
+    () => async (complaint: string) => {
+      const seq = ++routeSeq.current;
+      setRouteState('loading');
+      setRouteError(null);
+      try {
+        const result = await findBestDoctor(complaint, {
+          patientId: id,
+          patientLat: latitude,
+          patientLng: longitude,
+          source: 'self_report',
+        });
+        if (seq !== routeSeq.current) return;
+        if (result.best) {
+          setRouted(result.best);
+          setRouteMeta({ specialty: result.specialty, fallback: false });
+          setRouteState('done');
+          return;
+        }
+        // No specialty match from triage — fall back to any doctor so the
+        // patient is never stuck unable to book.
+        const all = await listDoctors();
+        if (seq !== routeSeq.current) return;
+        if (all.length === 0) throw new Error('No doctors are available to route to right now.');
+        const pick = all[Math.floor(Math.random() * all.length)];
+        setRouted({
+          user_id: pick.id,
+          doctor_code: '',
+          full_name: pick.name,
+          specialty: 'General',
+          years_experience: 0,
+          rating: 0,
+          city: null,
+          consultation_fee: null,
+          current_load: 0,
+          weekly_capacity: 0,
+          distanceKm: null,
+          loadRatio: 0,
+        });
+        setRouteMeta({ specialty: result.specialty, fallback: true });
+        setRouteState('done');
+      } catch (e) {
+        if (seq !== routeSeq.current) return;
+        setRouteError((e as Error).message || 'Could not reach the routing service.');
+        setRouteState('error');
+      }
+    },
+    [id, latitude, longitude],
+  );
+
+  // Debounce: re-route ~900ms after the patient stops typing their reason.
+  useEffect(() => {
+    const complaint = form.title.trim();
+    if (complaint.length < 6) {
+      routeSeq.current++;
+      setRouteState('idle');
+      setRouted(null);
+      setRouteMeta(null);
+      setRouteError(null);
+      return;
+    }
+    const t = setTimeout(() => void runRouting(complaint), 900);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.title]);
 
   const rows = appts.data ?? [];
   const now = new Date();
@@ -82,12 +170,12 @@ export default function PatientAppointments() {
   );
 
   const submit = () => {
-    if (!form.doctorId || !form.title.trim()) return;
+    if (!routed || !form.title.trim()) return;
     const start =
       form.date && form.time ? new Date(`${form.date}T${form.time}`).toISOString() : undefined;
     requestMut.mutate(
       {
-        doctorId: form.doctorId,
+        doctorId: routed.user_id,
         title: form.title.trim(),
         reason: form.reason.trim(),
         appointmentType: form.type,
@@ -96,9 +184,8 @@ export default function PatientAppointments() {
         preferredWindow: form.window.trim() || (start ? '' : 'Flexible'),
       },
       {
-        onSuccess: () =>
+        onSuccess: () => {
           setForm({
-            doctorId: '',
             title: '',
             reason: '',
             type: 'general_consultation',
@@ -106,7 +193,12 @@ export default function PatientAppointments() {
             date: '',
             time: '',
             window: '',
-          }),
+          });
+          routeSeq.current++;
+          setRouteState('idle');
+          setRouted(null);
+          setRouteMeta(null);
+        },
       },
     );
   };
@@ -168,18 +260,78 @@ export default function PatientAppointments() {
             </div>
 
             <label className="ax-field">
-              <span className="ax-label">Doctor</span>
-              <select
-                className="ax-select"
-                value={form.doctorId}
-                onChange={(e) => setForm((f) => ({ ...f, doctorId: e.target.value }))}
-              >
-                <option value="">Select a doctor…</option>
-                {(doctors.data ?? []).map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
+              <span className="ax-label">Reason</span>
+              <input
+                className="ax-input"
+                placeholder="e.g. Persistent headache, 4 days"
+                value={form.title}
+                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              />
             </label>
+
+            {/* ---- Auto-routed doctor: no manual picker. The reason above
+                 drives the triage model, which matches the nearest, least
+                 busy doctor for the right specialty. ---- */}
+            <div className="ax-field">
+              <span className="ax-label">Doctor</span>
+              {routeState === 'idle' && (
+                <div className="ax-route-hint">
+                  <Sparkles size={13} /> Describe the reason above and we’ll match you with a doctor automatically.
+                </div>
+              )}
+              {routeState === 'loading' && (
+                <div className="ax-route-hint">
+                  <Loader2 size={13} className="ax-spin-ic" /> Finding the right doctor for you…
+                </div>
+              )}
+              {routeState === 'error' && (
+                <div className="ax-route-hint ax-route-hint-err">
+                  {routeError || 'Could not route automatically.'}
+                  <button type="button" className="ax-route-retry" onClick={() => void runRouting(form.title.trim())}>
+                    <RefreshCw size={11} /> Retry
+                  </button>
+                </div>
+              )}
+              {routeState === 'done' && routed && (
+                <div className="ax-route-card">
+                  <span className="ax-avatar">
+                    {routed.full_name
+                      .replace(/^Dr\.?\s*/i, '')
+                      .split(/\s+/)
+                      .map((x) => x[0])
+                      .slice(0, 2)
+                      .join('')}
+                  </span>
+                  <div className="ax-route-body">
+                    <div className="ax-route-name">Dr. {routed.full_name.replace(/^Dr\.?\s*/i, '')}</div>
+                    <div className="ax-route-chips">
+                      <span className="ax-pill ax-pill-blue"><Stethoscope size={10} /> {routeMeta?.specialty ?? routed.specialty}</span>
+                      {routed.distanceKm != null && (
+                        <span className="ax-pill ax-pill-grey"><MapPin size={10} /> {routed.distanceKm < 1 ? '<1' : routed.distanceKm.toFixed(1)} km away</span>
+                      )}
+                      {!routeMeta?.fallback && (
+                        <span className={`ax-pill ${loadTier(routed.loadRatio).cls}`}>
+                          <Gauge size={10} /> {loadTier(routed.loadRatio).label}
+                        </span>
+                      )}
+                    </div>
+                    <p className="ax-route-note">
+                      {routeMeta?.fallback
+                        ? 'No specialty match yet — matched you with an available doctor.'
+                        : 'Matched by AI triage on distance and current patient load.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="ax-route-retry ax-route-retry-corner"
+                    title="Route again"
+                    onClick={() => void runRouting(form.title.trim())}
+                  >
+                    <RefreshCw size={12} />
+                  </button>
+                </div>
+              )}
+            </div>
 
             <label className="ax-field">
               <span className="ax-label">Appointment type</span>
@@ -194,16 +346,6 @@ export default function PatientAppointments() {
                   </option>
                 ))}
               </select>
-            </label>
-
-            <label className="ax-field">
-              <span className="ax-label">Reason</span>
-              <input
-                className="ax-input"
-                placeholder="e.g. Persistent headache, 4 days"
-                value={form.title}
-                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              />
             </label>
 
             <div className="ax-row-2">
@@ -263,7 +405,7 @@ export default function PatientAppointments() {
 
             <button
               className="ax-btn ax-btn-primary ax-btn-block"
-              disabled={requestMut.isPending || !form.doctorId || !form.title.trim()}
+              disabled={requestMut.isPending || !routed || routeState === 'loading' || !form.title.trim()}
               onClick={submit}
             >
               <CalendarPlus size={14} /> {requestMut.isPending ? 'Sending…' : 'Send request'}

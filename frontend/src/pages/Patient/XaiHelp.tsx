@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Sparkles,
   Brain,
@@ -6,10 +6,12 @@ import {
   Info,
   ThumbsUp,
   ThumbsDown,
-  ArrowRight,
   MessageCircleQuestion,
   HeartPulse,
   Pill,
+  Bot,
+  Loader2,
+  Send as SendIcon,
 } from 'lucide-react';
 import { DashboardLayout } from '../../components/DashboardLayout';
 import { ReasoningGraph } from '../../components/charts/ReasoningGraph';
@@ -17,9 +19,13 @@ import { ConfidenceRing } from '../../components/charts/ConfidenceRing';
 import { useProfile } from '../../lib/useProfile';
 import { fetchRecentVitals } from '../../voice-widget/vitals/vitalsApi';
 import { explainRisk } from '../../lib/riskModel';
+import { fetchPatientContext } from '../../lib/patientContext';
+import { askXaiAssistant, type XaiChatMessage } from '../../lib/xaiAssistant';
 import { patientNav } from './nav';
 import '../../components/dashboard.css';
 import '../../components/charts/xai-page.css';
+
+const VOICE_BACKEND_URL = import.meta.env.VITE_VOICE_BACKEND_URL as string | undefined;
 
 interface Insight {
   id: string;
@@ -48,6 +54,12 @@ const STATIC_INSIGHTS: Insight[] = [
   },
 ];
 
+interface ChatTurn {
+  role: 'user' | 'assistant';
+  text: string;
+  escalated?: boolean;
+}
+
 export default function PatientXaiHelp() {
   const { id: patientId, name, loading } = useProfile();
   const [liveInsight, setLiveInsight] = useState<Insight | null>(null);
@@ -55,8 +67,15 @@ export default function PatientXaiHelp() {
   const [activeId, setActiveId] = useState<string>('live-risk');
   const [tab, setTab] = useState<'explain' | 'ask'>('explain');
   const [vote, setVote] = useState<Record<string, 'up' | 'down'>>({});
+
+  // "Ask your care team" — an AI assistant that answers from this patient's
+  // own records (fetched fresh via fetchPatientContext, RLS-scoped to them),
+  // with a one-tap fallback to actually send the question to a human.
   const [question, setQuestion] = useState('');
-  const [asked, setAsked] = useState<string[]>([]);
+  const [chat, setChat] = useState<ChatTurn[]>([]);
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
+  const contextRef = useRef<string | null>(null);
 
   // Real model, not mock data: pulls the patient's latest logged vitals and
   // asks ml/service's XGBoost triage-risk model to score + explain them —
@@ -110,10 +129,34 @@ export default function PatientXaiHelp() {
   const INSIGHTS = liveInsight ? [liveInsight, ...STATIC_INSIGHTS] : STATIC_INSIGHTS;
   const active = INSIGHTS.find((i) => i.id === activeId) ?? INSIGHTS[0];
 
-  const submitQuestion = () => {
-    if (!question.trim()) return;
-    setAsked((a) => [question.trim(), ...a]);
+  const submitQuestion = async () => {
+    const text = question.trim();
+    if (!text || asking || !patientId || !VOICE_BACKEND_URL) return;
     setQuestion('');
+    setAskError(null);
+    const nextChat: ChatTurn[] = [...chat, { role: 'user', text }];
+    setChat(nextChat);
+    setAsking(true);
+    try {
+      if (!contextRef.current) {
+        contextRef.current = await fetchPatientContext(patientId);
+      }
+      const history: XaiChatMessage[] = nextChat
+        .slice(0, -1)
+        .map((t) => ({ role: t.role, content: t.text }));
+      const reply = await askXaiAssistant(VOICE_BACKEND_URL, text, contextRef.current, history);
+      setChat((c) => [...c, { role: 'assistant', text: reply }]);
+    } catch (e) {
+      setAskError(e instanceof Error ? e.message : "Couldn't reach the assistant.");
+      setChat((c) => c.slice(0, -1)); // drop the unanswered question, let them retry
+      setQuestion(text);
+    } finally {
+      setAsking(false);
+    }
+  };
+
+  const escalateTurn = (idx: number) => {
+    setChat((c) => c.map((t, i) => (i === idx ? { ...t, escalated: true } : t)));
   };
 
   return (
@@ -127,20 +170,20 @@ export default function PatientXaiHelp() {
       <div className="xai-shell">
         <header className="xai-header">
           <div className="xai-header-copy">
-            <h1>Why the AI said that</h1>
-            <p>Whenever our system makes a health suggestion, this page shows exactly which of your data points pushed it — and how sure the model is.</p>
+            <h1>Understanding your AI health insights</h1>
+            <p>Sometimes our system flags something about your health or suggests a change. This page explains, in plain words, why it said that — and how sure it really is.</p>
             {!liveInsight && (
               <p style={{ marginTop: 6, fontSize: 12, fontWeight: 700, color: liveError ? '#BD5A3F' : '#5C7680' }}>
-                {liveError ? `Risk model unavailable: ${liveError}` : 'Scoring your latest vitals with the risk model…'}
+                {liveError ? `We couldn't load your risk check right now: ${liveError}` : 'Looking at your latest vitals…'}
               </p>
             )}
           </div>
           <div className="xai-header-badge">
             <ConfidenceRing value={active.confidence} />
             <div className="xai-header-badge-text">
-              <div className="xai-header-badge-label">Model confidence</div>
+              <div className="xai-header-badge-label">How sure is the AI?</div>
               <div className="xai-header-badge-value">
-                {active.confidence >= 80 ? 'High agreement' : 'Worth confirming'}
+                {active.confidence >= 80 ? 'Quite confident' : 'Not fully sure — worth a second opinion'}
               </div>
             </div>
           </div>
@@ -156,7 +199,7 @@ export default function PatientXaiHelp() {
               <span className="xai-pill-icon">{i.icon === 'heart' ? <HeartPulse size={14} /> : <Pill size={14} />}</span>
               <span className="xai-pill-text">
                 <div className="xai-pill-title">{i.title}</div>
-                <div className="xai-pill-sub">{i.confidence}% confidence</div>
+                <div className="xai-pill-sub">{i.confidence}% sure</div>
               </span>
             </button>
           ))}
@@ -164,8 +207,8 @@ export default function PatientXaiHelp() {
 
         <div className="xai-main">
           <section className="xai-graph-card">
-            <div className="xai-card-title"><Brain size={14} />How the AI got here</div>
-            <div className="xai-card-sub">Every factor points into the conclusion it produced — thicker line, stronger pull</div>
+            <div className="xai-card-title"><Brain size={14} />How the AI reached this</div>
+            <div className="xai-card-sub">Each box below is one reason. A thicker line means that reason mattered more.</div>
             <div className="xai-graph-stage">
               <ReasoningGraph title={active.title} confidence={active.confidence} factors={active.factors} />
             </div>
@@ -174,15 +217,21 @@ export default function PatientXaiHelp() {
           <section className="xai-panel-card">
             <div className="xai-tabs">
               <button className={`xai-tab${tab === 'explain' ? ' active' : ''}`} onClick={() => setTab('explain')}>
-                <Sparkles size={12} style={{ verticalAlign: -2, marginRight: 5 }} />What drove this
+                <Sparkles size={12} style={{ verticalAlign: -2, marginRight: 5 }} />In simple terms
               </button>
               <button className={`xai-tab${tab === 'ask' ? ' active' : ''}`} onClick={() => setTab('ask')}>
-                <MessageCircleQuestion size={12} style={{ verticalAlign: -2, marginRight: 5 }} />Ask your care team
+                <MessageCircleQuestion size={12} style={{ verticalAlign: -2, marginRight: 5 }} />Ask about your health
               </button>
             </div>
 
             {tab === 'explain' ? (
               <div className="xai-panel-body">
+                <div className="xai-plain">
+                  <div className="xai-plain-label"><Info size={12} />What this means for you</div>
+                  <div className="xai-plain-text">{active.plain}</div>
+                </div>
+
+                <div className="xai-factor-list-label">The reasons behind it, from biggest to smallest effect</div>
                 {active.factors.map((f) => (
                   <div className="xai-factor" key={f.label}>
                     <div className="xai-factor-top">
@@ -198,13 +247,8 @@ export default function PatientXaiHelp() {
                   </div>
                 ))}
 
-                <div className="xai-plain">
-                  <div className="xai-plain-label"><Info size={12} />In plain language</div>
-                  <div className="xai-plain-text">{active.plain}</div>
-                </div>
-
                 <div className="xai-feedback">
-                  <span>Was this explanation helpful?</span>
+                  <span>Did this help you understand it?</span>
                   <button
                     className={`xai-icon-btn up${vote[active.id] === 'up' ? ' active' : ''}`}
                     aria-label="Helpful"
@@ -223,34 +267,63 @@ export default function PatientXaiHelp() {
               </div>
             ) : (
               <>
+                <div className="xai-ask-intro">
+                  <Bot size={13} />
+                  <span>Ask anything about your own visits, vitals, or appointments — answered instantly from your record. Not a diagnosis; for anything urgent, contact your care team directly.</span>
+                </div>
+
+                <div className="xai-panel-body">
+                  {chat.length === 0 ? (
+                    <div className="xai-ask-empty">
+                      No questions yet — try “What did the doctor say at my last visit?” or “Why was I flagged this risk level?”
+                    </div>
+                  ) : (
+                    <div className="xai-chat-list">
+                      {chat.map((turn, idx) => (
+                        <div className={`xai-chat-msg ${turn.role}`} key={idx}>
+                          <div className="xai-chat-bubble">{turn.text}</div>
+                          {turn.role === 'assistant' && (
+                            <div className="xai-chat-actions">
+                              {turn.escalated ? (
+                                <span className="xai-ask-status">Sent to your care team</span>
+                              ) : (
+                                <button className="xai-escalate-btn" onClick={() => escalateTurn(idx)}>
+                                  Still want a clinician to check this?
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {asking && (
+                        <div className="xai-chat-msg assistant">
+                          <div className="xai-chat-bubble xai-chat-loading">
+                            <Loader2 size={13} className="xai-spin" /> Looking through your record…
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {askError && <div className="xai-error">{askError}</div>}
+                </div>
+
                 <div className="xai-ask-form">
                   <input
                     className="xai-ask-input"
-                    placeholder="e.g. Why does family history still count if my labs are good?"
+                    placeholder={!patientId || !VOICE_BACKEND_URL ? 'Sign in to ask about your health' : 'e.g. Why was my last appointment flagged as high priority?'}
                     value={question}
+                    disabled={!patientId || !VOICE_BACKEND_URL || asking}
                     onChange={(e) => setQuestion(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && submitQuestion()}
                   />
-                  <button className="xai-ask-send" aria-label="Send question" onClick={submitQuestion}>
-                    <ArrowRight size={16} />
+                  <button
+                    className="xai-ask-send"
+                    aria-label="Send question"
+                    disabled={!patientId || !VOICE_BACKEND_URL || asking || !question.trim()}
+                    onClick={submitQuestion}
+                  >
+                    <SendIcon size={16} />
                   </button>
-                </div>
-                <div className="xai-panel-body">
-                  {asked.length === 0 ? (
-                    <div className="xai-ask-empty">No questions sent yet. Anything you ask here goes straight to your care team, along with this explanation.</div>
-                  ) : (
-                    <div className="xai-ask-list">
-                      {asked.map((q, idx) => (
-                        <div className="xai-ask-item" key={idx}>
-                          <div>
-                            <div className="xai-ask-item-text">{q}</div>
-                            <div className="xai-ask-item-sub">Sent with this insight attached</div>
-                          </div>
-                          <span className="xai-ask-status">Pending</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </>
             )}

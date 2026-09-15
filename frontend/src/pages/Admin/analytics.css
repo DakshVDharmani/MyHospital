@@ -27,7 +27,7 @@
     radial-gradient(900px 500px at 88% -10%, rgba(46, 230, 197, 0.10), transparent 60%),
     radial-gradient(700px 420px at 0% 8%, rgba(57, 135, 229, 0.10), transparent 55%),
     var(--hx-plane);
-  min-height: calc(100vh - 72px);
+  min-height: 100%;
 }
 
 /* ---- header row ---- */

@@ -28,19 +28,25 @@ const PHASE_TO_STATUS: Record<string, AssistantStatus> = {
 export function VitalsCheckIn({ backendUrl, patientId, lang, onClose, onViewHistory }: VitalsCheckInProps) {
   const v = useVitalsCheckIn(backendUrl, patientId);
   const [typedAnswer, setTypedAnswer] = useState("");
-  const startedRef = useRef(false);
+  const askedStepRef = useRef(-1);
 
   useEffect(() => {
     v.start(lang);
-    startedRef.current = false;
+    // Do NOT reset askedStepRef here: in React 18 StrictMode dev, mount
+    // effects run twice (effect1, effect2, cleanup, cleanup, effect1,
+    // effect2) — resetting the guard in this second run would undo it right
+    // before the ask-effect's second run, letting it fire askCurrentQuestion
+    // twice and spawn two concurrent recorders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Drives the question sequence: once idle (fresh start, or just advanced
-  // to the next step), speak + listen for the current question.
+  // to the next step), speak + listen for the current question. Guarded by
+  // askedStepRef so a duplicate effect firing for the same step doesn't ask
+  // twice.
   useEffect(() => {
-    if (v.phase === "idle") {
-      startedRef.current = true;
+    if (v.phase === "idle" && askedStepRef.current !== v.stepIndex) {
+      askedStepRef.current = v.stepIndex;
       v.askCurrentQuestion();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

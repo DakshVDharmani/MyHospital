@@ -32,6 +32,8 @@ import {
 } from '../../lib/consultations';
 import { downloadConsultationPdf, downloadConsultationTxt } from '../../lib/consultationDoc';
 
+const VOICE_BACKEND_URL = import.meta.env.VITE_VOICE_BACKEND_URL as string | undefined;
+
 const STATUS_TEXT: Record<string, string> = {
   idle: 'Ready',
   requesting_media: 'Enabling camera…',
@@ -102,7 +104,7 @@ export default function VideoCall() {
   const speakerLabel = isDoctor
     ? `Dr. ${myName || 'Doctor'}`
     : myName || appt?.patientName || 'Patient';
-  const transcript = useCallTranscript(speakerLabel);
+  const transcript = useCallTranscript(speakerLabel, VOICE_BACKEND_URL);
 
   // Use the appointment id itself as the room key — it is exactly what is in
   // the URL, so "same link" always means "same room" for both parties.
@@ -113,13 +115,14 @@ export default function VideoCall() {
     if (joined && appt) void markMeetingStarted(appt.id).catch(() => {});
   }, [joined, appt]);
 
-  // Start live speech-to-text once the call actually connects.
+  // Start live speech-to-text once the call actually connects and we have a
+  // local media stream (backend mode reuses its mic track directly).
   useEffect(() => {
-    if (call.status === 'connected' && !transcript.capturing && phase === 'call') {
+    if (call.status === 'connected' && call.localStream && !transcript.capturing && phase === 'call') {
       if (!startedAtRef.current) startedAtRef.current = new Date().toISOString();
-      transcript.start();
+      transcript.start(call.localStream);
     }
-  }, [call.status, transcript, phase]);
+  }, [call.status, call.localStream, transcript, phase]);
 
   const backToList = isDoctor ? '/doctor/appointments' : '/patient/appointments';
 

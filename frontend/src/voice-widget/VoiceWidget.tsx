@@ -39,7 +39,7 @@ export function VoiceWidget({ backendUrl, defaultLang }: VoiceWidgetProps) {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [asst.transcript, asst.reply, asst.error, open]);
+  }, [asst.messages, asst.status, asst.error, open]);
 
   const handleSend = () => {
     if (!textInput.trim()) return;
@@ -106,25 +106,31 @@ export function VoiceWidget({ backendUrl, defaultLang }: VoiceWidgetProps) {
           <div className="vw-divider" />
 
           <div className="vw-body" ref={scrollRef}>
-            {!asst.transcript && !asst.reply && !asst.error && (
+            {asst.messages.length === 0 && !asst.error && (
               <div className="vw-empty">
                 <Sparkles size={14} />
                 Ask as a patient or doctor — signing in, resetting a password, or anything else — in {activeLang.label.replace(/^\S+\s/, "")}.
               </div>
             )}
 
-            {asst.transcript && (
-              <div className="vw-bubble vw-bubble-user">
-                <span className="vw-bubble-label">You</span>
-                {asst.transcript}
+            {asst.messages.map((m, i) => (
+              <div key={i} className={`vw-bubble ${m.role === "user" ? "vw-bubble-user" : "vw-bubble-bot"}`}>
+                <span className="vw-bubble-label">{m.role === "user" ? "You" : "Care Assistant"}</span>
+                {m.content}
               </div>
-            )}
-            {asst.reply && (
-              <div className="vw-bubble vw-bubble-bot">
+            ))}
+
+            {asst.status === "thinking" && (
+              <div className="vw-bubble vw-bubble-bot vw-bubble-loading">
                 <span className="vw-bubble-label">Care Assistant</span>
-                {asst.reply}
+                <span className="vw-typing">
+                  <span className="vw-typing-dot" />
+                  <span className="vw-typing-dot" />
+                  <span className="vw-typing-dot" />
+                </span>
               </div>
             )}
+
             {asst.error && <div className="vw-error">{asst.error}</div>}
           </div>
 
@@ -247,6 +253,12 @@ const VOICE_WIDGET_CSS = `
 .vw-bubble-user { align-self: flex-end; background: linear-gradient(135deg, var(--vw-teal) 0%, var(--vw-teal-deep) 100%); color: #fff; border-bottom-right-radius: 3px; }
 .vw-bubble-bot { align-self: flex-start; background: var(--vw-field-bg); color: var(--vw-ink); border: 1px solid var(--vw-line); border-bottom-left-radius: 3px; }
 .vw-error { align-self: stretch; background: rgba(229, 84, 74, 0.1); color: var(--vw-danger); border: 1px solid rgba(229, 84, 74, 0.25); border-radius: 10px; padding: 8px 11px; font-size: 11.5px; font-weight: 700; }
+
+.vw-bubble-loading { display: flex; flex-direction: column; }
+.vw-typing { display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; }
+.vw-typing-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--vw-ink-soft); opacity: 0.5; animation: vw-pulse-dot 1s ease-in-out infinite; }
+.vw-typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.vw-typing-dot:nth-child(3) { animation-delay: 0.3s; }
 
 .vw-controls { padding: 0 14px 12px; }
 .vw-input-row { display: flex; gap: 6px; }
