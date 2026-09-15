@@ -11,6 +11,8 @@ app.use(express.json({ limit: "2mb" }));
 app.use("/api/tts", require("./routes/tts"));
 app.use("/api/stt", require("./routes/stt"));
 app.use("/api/chat", require("./routes/chat"));
+app.use("/api/xai-chat", require("./routes/xai-chat"));
+app.use("/api/consultation-summary", require("./routes/consultation-summary"));
 app.use("/api/admin", require("./routes/admin"));
 
 // Free-tier usage + supported languages
